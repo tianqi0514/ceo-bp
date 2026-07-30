@@ -31,6 +31,12 @@ git diff --check
 - 必需规范、记录和模板存在；
 - `git diff --check` 通过，无空白错误。
 
+远端复现：
+
+- GitHub Actions 工作流：[`docs` run 30529712972](https://github.com/tianqi0514/ceo-bp/actions/runs/30529712972)；
+- 验证提交：`09e34bfe0b7da4006167696cfdf58d0f3b0b9307`；
+- 结果：`completed / success`。
+
 ## 人工审阅
 
 | 检查项 | 结果 | 说明 |
