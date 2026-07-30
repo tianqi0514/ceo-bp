@@ -45,6 +45,17 @@ CEO_BP_PORT=9006 ./deploy/scripts/deploy-demo.sh /home/tianqi/ceo-bp
 
 部署脚本只构建并更新 Compose 项目 `ceo-bp` 的 `platform-api`，不执行 `docker compose down`，不清理其他镜像、网络或卷。
 
+若服务器无法稳定访问 Docker Hub，可在受信任的 `linux/amd64` 构建机执行测试和镜像构建，使用 `docker save` 导出，传输后核对 SHA-256，再在服务器 `docker load`。确认目标镜像 `ceo-bp/platform-api:<version>` 已存在后执行：
+
+```bash
+CEO_BP_VERSION=0.2.0 \
+CEO_BP_SKIP_BUILD=1 \
+CEO_BP_PORT=9006 \
+./deploy/scripts/deploy-demo.sh /home/tianqi/ceo-bp
+```
+
+临时镜像归档在加载和校验后删除；服务器保留不可变镜像及其 Image ID。禁止改用未经验证的镜像加速器或浮动标签绕过固定摘要。
+
 ## 4. 验证
 
 主机内验证：
@@ -62,7 +73,7 @@ docker compose -p ceo-bp -f deploy/compose/compose.demo.yml ps
 curl --fail http://121.196.149.55:9006/health/ready
 ```
 
-同时复查服务器原有监听端口和容器状态，确认没有被重启或替换。
+同时复查服务器原有监听端口和容器状态，确认没有被重启或替换。Docker 发布端口当前可直接从外部访问，未增加 firewalld 规则。
 
 ## 5. 回滚
 

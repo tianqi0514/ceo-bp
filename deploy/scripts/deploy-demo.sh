@@ -9,6 +9,11 @@ COMPOSE_FILE="$PROJECT_DIR/deploy/compose/compose.demo.yml"
 export CEO_BP_BUILD_SHA="${CEO_BP_BUILD_SHA:-$(git -C "$PROJECT_DIR" rev-parse --short=12 HEAD)}"
 export CEO_BP_VERSION="${CEO_BP_VERSION:-0.2.0}"
 
-docker compose -p ceo-bp -f "$COMPOSE_FILE" build platform-api
-docker compose -p ceo-bp -f "$COMPOSE_FILE" up -d --no-deps platform-api
+if test "${CEO_BP_SKIP_BUILD:-0}" = "1"; then
+  docker image inspect "ceo-bp/platform-api:$CEO_BP_VERSION" >/dev/null
+else
+  docker compose -p ceo-bp -f "$COMPOSE_FILE" build platform-api
+fi
+
+docker compose -p ceo-bp -f "$COMPOSE_FILE" up -d --no-build --no-deps platform-api
 docker compose -p ceo-bp -f "$COMPOSE_FILE" ps

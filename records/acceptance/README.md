@@ -1,3 +1,9 @@
 # 验收记录索引
 
-v0.1.0 是项目治理与架构文档基线，不是产品版本，不执行产品 UAT。首个可运行纵向切片必须使用 [`templates/UAT_RECORD.md`](../../templates/UAT_RECORD.md) 创建验收记录。
+v0.1.0 是项目治理与架构文档基线，不执行产品 UAT。
+
+| 版本 | 记录 | 结论 |
+|---|---|---|
+| 0.2.0 | [UAT-0.2.0-01 技术验收](0.2.0/UAT-0.2.0-01.md) | Conditionally Accepted（平台基础） |
+
+首个业务纵向切片必须使用 [`templates/UAT_RECORD.md`](../../templates/UAT_RECORD.md) 创建正式业务验收记录。
