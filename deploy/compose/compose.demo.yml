@@ -2,9 +2,10 @@ name: ceo-bp
 
 services:
   platform-api:
-    image: ceo-bp/platform-api:${CEO_BP_VERSION:-dev}
+    image: ceo-bp/platform-api:${CEO_BP_VERSION:-0.3.0}
     build:
-      context: ../../services/platform-api
+      context: ../..
+      dockerfile: services/platform-api/Dockerfile
     restart: unless-stopped
     environment:
       CEO_BP_ENV: ${CEO_BP_ENV:-demo}

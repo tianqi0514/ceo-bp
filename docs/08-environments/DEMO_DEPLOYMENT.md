@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | 文档编号 | ENV-001 |
-| 版本 | 0.2.0 |
+| 版本 | 0.3.0 |
 | 状态 | Baseline |
 | 生效日期 | 2026-07-30 |
 | 责任角色 | 运维负责人 |
@@ -17,7 +17,7 @@
 - 唯一新增对外端口：`9006/tcp`；
 - Compose 项目：`ceo-bp`；
 - 网络：`ceo-bp-net`；
-- 首期服务：`platform-api` 一个容器；
+- 首期服务：`platform-api` 一个容器，同时托管已构建的企业控制台静态资源；
 - 首期不新增 PostgreSQL、Redis、Milvus、Nginx 或系统级 Python 包。
 
 严禁修改 `/home/tianqi/aidp` 或服务器其他现有项目、容器、Nginx、数据库和端口。
@@ -48,7 +48,7 @@ CEO_BP_PORT=9006 ./deploy/scripts/deploy-demo.sh /home/tianqi/ceo-bp
 若服务器无法稳定访问 Docker Hub，可在受信任的 `linux/amd64` 构建机执行测试和镜像构建，使用 `docker save` 导出，传输后核对 SHA-256，再在服务器 `docker load`。确认目标镜像 `ceo-bp/platform-api:<version>` 已存在后执行：
 
 ```bash
-CEO_BP_VERSION=0.2.0 \
+CEO_BP_VERSION=0.3.0 \
 CEO_BP_SKIP_BUILD=1 \
 CEO_BP_PORT=9006 \
 ./deploy/scripts/deploy-demo.sh /home/tianqi/ceo-bp
@@ -64,6 +64,8 @@ CEO_BP_PORT=9006 \
 curl --fail http://127.0.0.1:9006/health/live
 curl --fail http://127.0.0.1:9006/health/ready
 curl --fail http://127.0.0.1:9006/api/v1/system/info
+curl --fail http://127.0.0.1:9006/api/v1/overview
+curl --fail http://127.0.0.1:9006/
 docker compose -p ceo-bp -f deploy/compose/compose.demo.yml ps
 ```
 

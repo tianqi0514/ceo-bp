@@ -46,3 +46,9 @@ class Capability(StrictModel):
 
 class CapabilityList(StrictModel):
     items: list[Capability]
+
+
+class OverviewResponse(StrictModel):
+    info: SystemInfo
+    health: HealthResponse
+    capabilities: list[Capability]

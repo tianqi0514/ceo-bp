@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -36,9 +37,12 @@ CONTROLLED_METADATA = ("| 文档编号 |", "| 版本 |", "| 状态 |")
 
 
 def markdown_files() -> list[Path]:
-    return sorted(
-        path for path in ROOT.rglob("*.md") if not IGNORED_DIRS.intersection(path.parts)
-    )
+    files: list[Path] = []
+    for current, directories, filenames in os.walk(ROOT):
+        directories[:] = [name for name in directories if name not in IGNORED_DIRS]
+        directory = Path(current)
+        files.extend(directory / name for name in filenames if name.endswith(".md"))
+    return sorted(files)
 
 
 def validate_required(errors: list[str]) -> None:
