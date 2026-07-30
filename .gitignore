@@ -12,4 +12,6 @@ __pycache__/
 dist/
 build/
 coverage/
+.coverage
+.coverage.*
 *.log
