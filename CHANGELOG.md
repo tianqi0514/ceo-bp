@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-30
+
 ### Changed
 
 - 控制台改为只展示真实运行状态、启动时间、版本、环境和可访问接口；
@@ -48,7 +50,8 @@
 - 建立版本、测试、验收、风险和决策记录目录及模板；
 - 增加本地文档完整性校验工具。
 
-[Unreleased]: https://github.com/tianqi0514/ceo-bp/compare/f10dc710938cf06e6825dd3478a15aea1d7f64aa...HEAD
+[Unreleased]: https://github.com/tianqi0514/ceo-bp/compare/44c94030a5286f8904096cb189966811aa9dde91...HEAD
+[0.3.1]: https://github.com/tianqi0514/ceo-bp/commit/44c94030a5286f8904096cb189966811aa9dde91
 [0.3.0]: https://github.com/tianqi0514/ceo-bp/commit/f10dc710938cf06e6825dd3478a15aea1d7f64aa
 [0.2.0]: https://github.com/tianqi0514/ceo-bp/commit/87863ef858928827dd02acec40146f97d8123e5e
 [0.1.0]: https://github.com/tianqi0514/ceo-bp/releases/tag/v0.1.0
