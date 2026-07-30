@@ -1,84 +1,58 @@
 import {
   Activity,
-  BarChart3,
-  BookOpenText,
-  Bot,
-  Boxes,
-  BrainCircuit,
-  Check,
-  ChevronRight,
-  CircleGauge,
-  DatabaseZap,
-  GitBranch,
-  Menu,
-  Network,
+  BookOpen,
+  Box,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
   RefreshCw,
-  Settings,
-  ShieldCheck,
-  Target,
-  X,
+  Server,
+  TriangleAlert,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { type Capability, loadOverview, type Overview } from "./api";
+import { useCallback, useEffect, useState } from "react";
+import { loadOverview, type Overview } from "./api";
 
-const NAV_ITEMS = [
-  { label: "经营总览", icon: CircleGauge, active: true },
-  { label: "指标中心", icon: BarChart3, phase: "P2" },
-  { label: "企业知识", icon: BookOpenText, phase: "P3" },
-  { label: "决策事项", icon: GitBranch, phase: "P3" },
-  { label: "预测与模拟", icon: BrainCircuit, phase: "P4" },
-];
-const SKELETON_KEYS = [
-  "foundation",
-  "metrics",
-  "knowledge",
-  "decisions",
-  "forecast",
-];
+const DATE_FORMAT = new Intl.DateTimeFormat("zh-CN", {
+  dateStyle: "medium",
+  timeStyle: "medium",
+  hour12: false,
+});
 
-const CAPABILITY_META: Record<
-  string,
-  { description: string; icon: typeof Boxes }
-> = {
-  "platform-foundation": {
-    description: "统一契约、健康检查、请求追踪与受控部署已经就绪。",
-    icon: Boxes,
-  },
-  metrics: {
-    description: "统一指标口径、版本、目标、责任人与审批流程。",
-    icon: Target,
-  },
-  knowledge: {
-    description: "文档版本、权限、混合检索、引用与质量反馈。",
-    icon: Network,
-  },
-  decisions: {
-    description: "证据、方案、审批、行动跟踪和经营效果复盘。",
-    icon: ShieldCheck,
-  },
-  forecast: {
-    description: "统计回测、置信区间、情景比较与风险分析。",
-    icon: Activity,
-  },
-};
+function formatTimestamp(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : DATE_FORMAT.format(date);
+}
+
+function formatUptime(totalSeconds: number | undefined): string {
+  if (totalSeconds === undefined) return "—";
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  if (days > 0) return `${days} 天 ${hours} 小时`;
+  if (hours > 0) return `${hours} 小时 ${minutes} 分钟`;
+  return `${minutes} 分钟`;
+}
 
 function App() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(true);
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
-      setOverview(await loadOverview(signal));
+      const nextOverview = await loadOverview(signal);
+      setOverview(nextOverview);
+      setCheckedAt(new Date().toISOString());
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError")
         return;
-      setError(reason instanceof Error ? reason.message : "平台状态暂时不可用");
+      setError(reason instanceof Error ? reason.message : "系统状态暂时不可用");
     } finally {
-      if (!signal?.aborted) setLoading(false);
+      if (!signal?.aborted) setRefreshing(false);
     }
   }, []);
 
@@ -88,309 +62,219 @@ function App() {
     return () => controller.abort();
   }, [refresh]);
 
-  const availableCount = useMemo(
-    () =>
-      overview?.capabilities.filter((item) => item.status === "foundation")
-        .length ?? 0,
-    [overview],
-  );
+  const initialLoading = refreshing && !overview;
+  const isReady = overview?.health.status === "ready";
 
   return (
     <div className="app-shell">
-      <aside
-        className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}
-        aria-label="应用导航"
-      >
-        <div className="brand-block">
-          <div className="brand-mark" aria-hidden="true">
-            <Bot size={22} strokeWidth={1.8} />
-          </div>
-          <div>
+      <header className="app-header">
+        <a className="brand" href="/" aria-label="CEO-BP 系统运行状态首页">
+          <span className="brand-mark" aria-hidden="true">
+            <Server size={21} />
+          </span>
+          <span>
             <strong>CEO-BP</strong>
-            <span>经营决策分析平台</span>
-          </div>
-          <button
-            className="icon-button sidebar-close"
-            type="button"
-            aria-label="关闭导航"
-            onClick={() => setMenuOpen(false)}
+            <small>企业经营决策分析平台</small>
+          </span>
+        </a>
+        <nav className="header-actions" aria-label="页面操作">
+          <a
+            className="text-link"
+            href="/docs"
+            target="_blank"
+            rel="noreferrer"
           >
-            <X size={20} />
-          </button>
-        </div>
-
-        <nav className="primary-nav" aria-label="主导航">
-          <p className="nav-eyebrow">决策工作台</p>
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className={`nav-item ${item.active ? "nav-active" : ""}`}
-                type="button"
-                key={item.label}
-                aria-current={item.active ? "page" : undefined}
-                disabled={!item.active}
-              >
-                <Icon size={19} strokeWidth={1.8} />
-                <span>{item.label}</span>
-                {item.phase ? (
-                  <small>{item.phase}</small>
-                ) : (
-                  <ChevronRight size={16} />
-                )}
-              </button>
-            );
-          })}
-          <p className="nav-eyebrow nav-group">平台治理</p>
-          <button className="nav-item" type="button" disabled>
-            <DatabaseZap size={19} strokeWidth={1.8} />
-            <span>数据与语义</span>
-            <small>P1+</small>
-          </button>
-          <button className="nav-item" type="button" disabled>
-            <Settings size={19} strokeWidth={1.8} />
-            <span>系统管理</span>
-            <small>P1+</small>
+            <BookOpen size={17} />
+            API 文档
+            <ExternalLink size={14} />
+          </a>
+          <button
+            className="refresh-button"
+            type="button"
+            disabled={refreshing}
+            onClick={() => void refresh()}
+          >
+            <RefreshCw className={refreshing ? "is-spinning" : ""} size={17} />
+            {refreshing ? "正在刷新" : "刷新状态"}
           </button>
         </nav>
+      </header>
 
-        <div className="sidebar-foot">
-          <span className="status-dot" />
+      <main className="page-content">
+        <div className="page-heading">
           <div>
-            <strong>
-              {overview?.health.status === "ready"
-                ? "平台基础在线"
-                : "正在连接"}
-            </strong>
-            <small>真实状态由 platform-api 提供</small>
+            <p>系统管理</p>
+            <h1>运行状态</h1>
+            <span>确认当前部署是否可访问，以及正在运行的版本。</span>
           </div>
+          <StatusBadge ready={isReady} loading={initialLoading} />
         </div>
-      </aside>
 
-      {menuOpen ? (
-        <button
-          className="sidebar-scrim"
-          type="button"
-          aria-label="关闭导航遮罩"
-          onClick={() => setMenuOpen(false)}
-        />
-      ) : null}
+        {error ? (
+          <ErrorState message={error} onRetry={() => void refresh()} />
+        ) : null}
 
-      <main className="main-content">
-        <header className="topbar">
-          <button
-            className="icon-button menu-button"
-            type="button"
-            aria-label="打开导航"
-            onClick={() => setMenuOpen(true)}
-          >
-            <Menu size={21} />
-          </button>
-          <div>
-            <p className="breadcrumb">决策工作台 / 经营总览</p>
-            <h1>经营决策工作台</h1>
-          </div>
-          <div className="topbar-actions">
-            <span className="environment-chip">
-              <span className="status-dot" />
-              {overview?.info.environment ?? "connecting"}
-            </span>
-            <a
-              className="docs-link"
-              href="/docs"
-              target="_blank"
-              rel="noreferrer"
-            >
-              API 文档
-              <ChevronRight size={15} />
-            </a>
-          </div>
-        </header>
+        <section className="summary-grid" aria-label="运行状态摘要">
+          <SummaryCard
+            icon={Activity}
+            label="服务状态"
+            value={initialLoading ? "读取中" : isReady ? "正常" : "不可用"}
+            detail={overview?.info.service ?? "platform-api"}
+          />
+          <SummaryCard
+            icon={Clock3}
+            label="持续运行"
+            value={
+              initialLoading ? "—" : formatUptime(overview?.uptime_seconds)
+            }
+            detail={`启动于 ${formatTimestamp(overview?.started_at ?? null)}`}
+          />
+          <SummaryCard
+            icon={Box}
+            label="应用版本"
+            value={initialLoading ? "—" : `v${overview?.info.version ?? "—"}`}
+            detail={`构建 ${overview?.info.build_sha ?? "—"}`}
+          />
+          <SummaryCard
+            icon={Server}
+            label="运行环境"
+            value={initialLoading ? "—" : (overview?.info.environment ?? "—")}
+            detail="当前服务返回的环境标识"
+          />
+        </section>
 
-        <div className="page-content">
-          <section className="hero-panel">
-            <div className="hero-copy">
-              <span className="section-kicker">CONTROL TOWER · FOUNDATION</span>
-              <h2>把经营事实、企业知识与决策行动连接成闭环</h2>
-              <p>
-                当前工作台只展示平台真实建设状态。指标、知识、决策与预测能力将在完成契约、权限和测试后逐步开放。
-              </p>
-            </div>
-            <section className="hero-system" aria-label="系统链路">
-              <div className="system-node system-node-active">
-                <CircleGauge size={20} />
-                <span>企业控制台</span>
-              </div>
-              <span className="connector" />
-              <div className="system-node system-node-active">
-                <Boxes size={20} />
-                <span>Platform API</span>
-              </div>
-              <span className="connector connector-muted" />
-              <div className="system-node system-node-planned">
-                <Network size={20} />
-                <span>语义 / 数据引擎</span>
-              </div>
-            </section>
-          </section>
-
-          {error ? (
-            <ErrorState message={error} onRetry={() => void refresh()} />
-          ) : null}
-
-          <section className="stat-grid" aria-label="平台状态摘要">
-            <StatusCard
-              label="运行状态"
-              value={
-                loading
-                  ? "读取中"
-                  : overview?.health.status === "ready"
-                    ? "就绪"
-                    : "异常"
-              }
-              detail="前端与后端联合健康"
-              tone="green"
-              icon={Activity}
-            />
-            <StatusCard
-              label="应用版本"
-              value={loading ? "—" : `v${overview?.info.version ?? "—"}`}
-              detail={`构建 ${overview?.info.build_sha ?? "—"}`}
-              tone="blue"
-              icon={Boxes}
-            />
-            <StatusCard
-              label="已开放能力"
-              value={
-                loading
-                  ? "—"
-                  : `${availableCount} / ${overview?.capabilities.length ?? 0}`
-              }
-              detail="未通过门禁的能力保持隐藏"
-              tone="amber"
-              icon={ShieldCheck}
-            />
-            <StatusCard
-              label="当前环境"
-              value={loading ? "—" : (overview?.info.environment ?? "—")}
-              detail="9006 集成 / 演示环境"
-              tone="violet"
-              icon={DatabaseZap}
-            />
-          </section>
-
-          <section className="content-grid">
-            <div className="roadmap-panel panel">
-              <div className="panel-heading">
-                <div>
-                  <span className="section-kicker">CAPABILITY ROADMAP</span>
-                  <h3>能力建设状态</h3>
-                </div>
-                <span className="live-source">实时 API</span>
-              </div>
-              <div className="capability-list">
-                {loading
-                  ? SKELETON_KEYS.map((key) => (
-                      <div className="capability-skeleton" key={key} />
-                    ))
-                  : overview?.capabilities.map((capability) => (
-                      <CapabilityRow
-                        capability={capability}
-                        key={capability.id}
-                      />
-                    ))}
+        <section className="details-grid">
+          <article className="panel service-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>服务信息</h2>
+                <p>以下内容直接来自当前运行实例。</p>
               </div>
             </div>
+            <dl className="service-details">
+              <DetailRow
+                label="服务名称"
+                value={overview?.info.service}
+                loading={initialLoading}
+              />
+              <DetailRow
+                label="产品名称"
+                value={overview?.info.product}
+                loading={initialLoading}
+              />
+              <DetailRow
+                label="服务端时间"
+                value={formatTimestamp(overview?.server_time ?? null)}
+                loading={initialLoading}
+              />
+              <DetailRow
+                label="本次检查"
+                value={formatTimestamp(checkedAt)}
+                loading={initialLoading}
+              />
+            </dl>
+          </article>
 
-            <aside className="principles-panel panel">
-              <span className="section-kicker">DELIVERY STANDARD</span>
-              <h3>全栈交付门禁</h3>
-              <p>从本版本开始，每项功能按同一纵向切片交付。</p>
-              <ul>
-                <li>
-                  <Check size={16} />
-                  后端领域模型与 OpenAPI 契约
-                </li>
-                <li>
-                  <Check size={16} />
-                  前端加载、空态、错误和权限状态
-                </li>
-                <li>
-                  <Check size={16} />
-                  前后端自动测试与联合验收
-                </li>
-                <li>
-                  <Check size={16} />
-                  版本、发布、回滚和运行证据
-                </li>
-              </ul>
-              <div className="next-slice">
-                <span>下一个纵向切片</span>
-                <strong>身份 / 租户上下文</strong>
-                <small>随后进入指标中心最小闭环</small>
+          <article className="panel endpoints-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>可用接口</h2>
+                <p>点击路径会在新窗口打开对应的实际地址。</p>
               </div>
-            </aside>
-          </section>
-        </div>
+              <span>{overview?.endpoints.length ?? 0} 个</span>
+            </div>
+            <div className="endpoint-list">
+              {initialLoading ? (
+                <LoadingRows />
+              ) : (
+                overview?.endpoints.map((endpoint) => (
+                  <a
+                    className="endpoint-row"
+                    href={endpoint.path}
+                    target="_blank"
+                    rel="noreferrer"
+                    key={endpoint.path}
+                  >
+                    <code>{endpoint.method}</code>
+                    <span>
+                      <strong>{endpoint.name}</strong>
+                      <small>{endpoint.path}</small>
+                    </span>
+                    <ExternalLink size={15} aria-hidden="true" />
+                  </a>
+                ))
+              )}
+            </div>
+          </article>
+        </section>
       </main>
     </div>
   );
 }
 
-function StatusCard({
+function StatusBadge({ ready, loading }: { ready: boolean; loading: boolean }) {
+  return (
+    <div
+      className={`status-badge ${ready ? "status-ready" : ""}`}
+      role="status"
+    >
+      {loading ? (
+        <RefreshCw className="is-spinning" size={17} />
+      ) : ready ? (
+        <CheckCircle2 size={17} />
+      ) : (
+        <TriangleAlert size={17} />
+      )}
+      {loading ? "正在检查" : ready ? "服务正常" : "需要检查"}
+    </div>
+  );
+}
+
+function SummaryCard({
+  icon: Icon,
   label,
   value,
   detail,
-  tone,
-  icon: Icon,
 }: {
+  icon: typeof Activity;
   label: string;
   value: string;
   detail: string;
-  tone: "green" | "blue" | "amber" | "violet";
-  icon: typeof Activity;
 }) {
   return (
-    <article className="stat-card">
-      <div className={`stat-icon tone-${tone}`}>
-        <Icon size={20} strokeWidth={1.8} />
-      </div>
-      <div>
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{detail}</small>
-      </div>
+    <article className="summary-card">
+      <Icon size={20} aria-hidden="true" />
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
     </article>
   );
 }
 
-function CapabilityRow({ capability }: { capability: Capability }) {
-  const meta = CAPABILITY_META[capability.id] ?? {
-    description: "能力说明将在设计基线批准后补充。",
-    icon: Boxes,
-  };
-  const Icon = meta.icon;
-  const available = capability.status === "foundation";
+function DetailRow({
+  label,
+  value,
+  loading,
+}: {
+  label: string;
+  value?: string;
+  loading: boolean;
+}) {
   return (
-    <article className="capability-row">
-      <div
-        className={`capability-icon ${available ? "capability-active" : ""}`}
-      >
-        <Icon size={19} strokeWidth={1.8} />
-      </div>
-      <div className="capability-copy">
-        <div>
-          <h4>{capability.name}</h4>
-          <span>{capability.target_phase}</span>
-        </div>
-        <p>{meta.description}</p>
-      </div>
-      <span
-        className={`status-pill ${available ? "status-available" : "status-planned"}`}
-      >
-        {available ? "已就绪" : "规划中"}
-      </span>
-    </article>
+    <div>
+      <dt>{label}</dt>
+      <dd>{loading ? "读取中" : (value ?? "—")}</dd>
+    </div>
+  );
+}
+
+function LoadingRows() {
+  return (
+    <div className="loading-rows" role="status" aria-label="正在读取接口列表">
+      <span />
+      <span />
+      <span />
+    </div>
   );
 }
 
@@ -403,13 +287,13 @@ function ErrorState({
 }) {
   return (
     <section className="error-state" role="alert">
+      <TriangleAlert size={20} aria-hidden="true" />
       <div>
-        <strong>暂时无法读取平台状态</strong>
+        <strong>无法读取运行状态</strong>
         <span>{message}</span>
       </div>
       <button type="button" onClick={onRetry}>
-        <RefreshCw size={16} />
-        重新连接
+        重新检查
       </button>
     </section>
   );

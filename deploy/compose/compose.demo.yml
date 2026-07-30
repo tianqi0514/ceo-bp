@@ -2,7 +2,7 @@ name: ceo-bp
 
 services:
   platform-api:
-    image: ceo-bp/platform-api:${CEO_BP_VERSION:-0.3.0}
+    image: ceo-bp/platform-api:${CEO_BP_VERSION:-0.3.1}
     build:
       context: ../..
       dockerfile: services/platform-api/Dockerfile

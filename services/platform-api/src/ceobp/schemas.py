@@ -1,5 +1,6 @@
 """Transport schemas for the system foundation endpoints."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -48,7 +49,17 @@ class CapabilityList(StrictModel):
     items: list[Capability]
 
 
+class EndpointInfo(StrictModel):
+    method: Literal["GET"]
+    path: str
+    name: str
+
+
 class OverviewResponse(StrictModel):
     info: SystemInfo
     health: HealthResponse
     capabilities: list[Capability]
+    started_at: datetime
+    server_time: datetime
+    uptime_seconds: int
+    endpoints: list[EndpointInfo]

@@ -89,6 +89,15 @@ def test_overview_aggregates_system_health_and_capabilities() -> None:
     assert body["info"]["build_sha"] == "fullstack"
     assert body["health"]["status"] == "ready"
     assert len(body["capabilities"]) == 5
+    assert body["uptime_seconds"] >= 0
+    assert body["started_at"].endswith("Z")
+    assert body["server_time"].endswith("Z")
+    assert {endpoint["path"] for endpoint in body["endpoints"]} == {
+        "/",
+        "/health/ready",
+        "/api/v1/overview",
+        "/docs",
+    }
 
 
 def test_request_id_is_preserved_when_safe() -> None:

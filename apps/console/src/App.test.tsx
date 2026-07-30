@@ -9,14 +9,14 @@ const overview = {
   info: {
     product: "CEO-BP",
     service: "platform-api",
-    version: "0.3.0",
+    version: "0.3.1",
     environment: "demo",
-    build_sha: "fullstack",
+    build_sha: "practical-ui",
   },
   health: {
     status: "ready" as const,
     service: "platform-api",
-    version: "0.3.0",
+    version: "0.3.1",
   },
   capabilities: [
     {
@@ -32,6 +32,13 @@ const overview = {
       target_phase: "P2",
     },
   ],
+  started_at: "2026-07-30T10:00:00Z",
+  server_time: "2026-07-30T12:05:00Z",
+  uptime_seconds: 7_500,
+  endpoints: [
+    { method: "GET" as const, path: "/health/ready", name: "服务就绪检查" },
+    { method: "GET" as const, path: "/docs", name: "API 文档" },
+  ],
 };
 
 describe("App", () => {
@@ -39,19 +46,23 @@ describe("App", () => {
     vi.mocked(loadOverview).mockReset();
   });
 
-  it("renders live backend status and capability states", async () => {
+  it("renders only live operational data and working links", async () => {
     vi.mocked(loadOverview).mockResolvedValue(overview);
 
     render(<App />);
 
-    expect(await screen.findByText("v0.3.0")).toBeInTheDocument();
-    expect(screen.getByText("1 / 2")).toBeInTheDocument();
-    expect(screen.getByText("平台基础")).toBeInTheDocument();
-    expect(
-      screen.getByText("指标中心", { selector: "h4" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("已就绪")).toBeInTheDocument();
-    expect(screen.getByText("规划中")).toBeInTheDocument();
+    expect(await screen.findByText("v0.3.1")).toBeInTheDocument();
+    expect(screen.getByText("服务正常")).toBeInTheDocument();
+    expect(screen.getByText("2 小时 5 分钟")).toBeInTheDocument();
+    expect(screen.getByText("构建 practical-ui")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /服务就绪检查/ })).toHaveAttribute(
+      "href",
+      "/health/ready",
+    );
+    expect(screen.queryByText("规划中")).not.toBeInTheDocument();
+    expect(screen.queryByText("下一个纵向切片")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { hidden: true })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "刷新状态" })).toBeEnabled();
   });
 
   it("shows an error and retries the API request", async () => {
@@ -62,24 +73,20 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByText("连接失败")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "重新连接" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新检查" }));
 
     await waitFor(() => expect(loadOverview).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("v0.3.0")).toBeInTheDocument();
+    expect(await screen.findByText("v0.3.1")).toBeInTheDocument();
   });
 
-  it("opens and closes mobile navigation", async () => {
+  it("refreshes operational data when the user asks", async () => {
     vi.mocked(loadOverview).mockResolvedValue(overview);
 
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "打开导航" }));
+    await screen.findByText("v0.3.1");
+    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
 
-    expect(screen.getByRole("complementary", { name: "应用导航" })).toHaveClass(
-      "sidebar-open",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "关闭导航" }));
-    expect(
-      screen.getByRole("complementary", { name: "应用导航" }),
-    ).not.toHaveClass("sidebar-open");
+    await waitFor(() => expect(loadOverview).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "刷新状态" })).toBeEnabled();
   });
 });

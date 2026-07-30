@@ -21,10 +21,20 @@ export interface Capability {
   target_phase: string;
 }
 
+export interface EndpointInfo {
+  method: "GET";
+  path: string;
+  name: string;
+}
+
 export interface Overview {
   info: SystemInfo;
   health: HealthInfo;
   capabilities: Capability[];
+  started_at: string;
+  server_time: string;
+  uptime_seconds: number;
+  endpoints: EndpointInfo[];
 }
 
 export async function loadOverview(signal?: AbortSignal): Promise<Overview> {

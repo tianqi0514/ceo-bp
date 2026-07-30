@@ -11,12 +11,16 @@ describe("loadOverview", () => {
       info: {
         product: "CEO-BP",
         service: "platform-api",
-        version: "0.3.0",
+        version: "0.3.1",
         environment: "test",
         build_sha: "abc123",
       },
-      health: { status: "ready", service: "platform-api", version: "0.3.0" },
+      health: { status: "ready", service: "platform-api", version: "0.3.1" },
       capabilities: [],
+      started_at: "2026-07-30T10:00:00Z",
+      server_time: "2026-07-30T10:00:03Z",
+      uptime_seconds: 3,
+      endpoints: [],
     };
     vi.stubGlobal(
       "fetch",

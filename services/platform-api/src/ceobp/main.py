@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
@@ -13,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from ceobp.schemas import (
     Capability,
     CapabilityList,
+    EndpointInfo,
     HealthResponse,
     OverviewResponse,
     ServiceLinks,
@@ -70,8 +72,18 @@ def _capabilities() -> list[Capability]:
     ]
 
 
+def _endpoints() -> list[EndpointInfo]:
+    return [
+        EndpointInfo(method="GET", path="/", name="系统运行控制台"),
+        EndpointInfo(method="GET", path="/health/ready", name="服务就绪检查"),
+        EndpointInfo(method="GET", path="/api/v1/overview", name="运行状态总览"),
+        EndpointInfo(method="GET", path="/docs", name="API 文档"),
+    ]
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     runtime = settings or Settings.from_environment()
+    started_at = datetime.now(UTC)
     app = FastAPI(
         title=runtime.product_name,
         summary="企业经营决策分析平台统一 API",
@@ -131,6 +143,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/overview", response_model=OverviewResponse, tags=["system"])
     async def overview() -> OverviewResponse:
+        server_time = datetime.now(UTC)
         return OverviewResponse(
             info=SystemInfo(
                 product=runtime.product_name,
@@ -145,6 +158,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 version=runtime.version,
             ),
             capabilities=_capabilities(),
+            started_at=started_at,
+            server_time=server_time,
+            uptime_seconds=max(0, int((server_time - started_at).total_seconds())),
+            endpoints=_endpoints(),
         )
 
     static_dir = Path(runtime.static_dir)
