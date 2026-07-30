@@ -1,3 +1,7 @@
 # 风险记录索引
 
-P0 启动时应基于开发备忘录第 10 节创建首份正式风险台账，并将每项风险映射到具体责任人和期限。使用 [`templates/RISK_REGISTER.md`](../../templates/RISK_REGISTER.md)。
+| 台账 | 日期 | 状态 |
+|---|---|---|
+| [P0 项目风险台账](P0-RISK-REGISTER.md) | 2026-07-30 | Open |
+
+后续版本使用 [`templates/RISK_REGISTER.md`](../../templates/RISK_REGISTER.md) 创建或更新正式台账。

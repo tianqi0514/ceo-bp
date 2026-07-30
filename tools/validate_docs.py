@@ -11,6 +11,16 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
+IGNORED_DIRS = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "dist",
+    "node_modules",
+}
 REQUIRED_FILES = (
     "README.md",
     "CHANGELOG.md",
@@ -26,7 +36,9 @@ CONTROLLED_METADATA = ("| 文档编号 |", "| 版本 |", "| 状态 |")
 
 
 def markdown_files() -> list[Path]:
-    return sorted(path for path in ROOT.rglob("*.md") if ".git" not in path.parts)
+    return sorted(
+        path for path in ROOT.rglob("*.md") if not IGNORED_DIRS.intersection(path.parts)
+    )
 
 
 def validate_required(errors: list[str]) -> None:

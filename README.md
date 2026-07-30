@@ -2,7 +2,7 @@
 
 CEO-BP 是面向企业经营管理者的决策分析平台。本仓库用于统一承载产品文档、架构、代码、测试、部署及全过程记录。
 
-当前仓库处于 **v0.1.0 项目治理与架构基线阶段**，尚不代表生产可用版本。
+当前仓库处于 **v0.2.0 P0/P1 工程开发阶段**：治理基线已建立，轻量 `platform-api` 骨架正在集成环境验证，尚不代表生产可用版本。
 
 ## 项目目标
 
@@ -26,6 +26,7 @@ CEO-BP 是面向企业经营管理者的决策分析平台。本仓库用于统�
 - [版本与发布管理](docs/05-release/RELEASE_MANAGEMENT.md)
 - [验收手册](docs/06-acceptance/ACCEPTANCE_MANUAL.md)
 - [运维、安全与合规](docs/07-operations/OPERATIONS_SECURITY.md)
+- [9006 演示环境部署](docs/08-environments/DEMO_DEPLOYMENT.md)
 - [过程记录](records/README.md)
 - [变更日志](CHANGELOG.md)
 
@@ -43,7 +44,7 @@ tools/                      仓库级校验工具
 tests/                      跨模块契约、集成和验收测试
 ```
 
-代码目录将在对应迭代开始时按架构基线创建，避免在尚未完成组件准入和许可证审计前复制上游源码。
+当前仅新增自主实现的 `platform-api` 基础骨架；在完成组件准入和许可证审计前，不复制上游源码。
 
 ## 文档校验
 
@@ -51,6 +52,7 @@ tests/                      跨模块契约、集成和验收测试
 
 ```bash
 python3 tools/validate_docs.py
+make verify
 ```
 
 ## 协作规则

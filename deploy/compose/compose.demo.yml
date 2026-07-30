@@ -1,0 +1,29 @@
+name: ceo-bp
+
+services:
+  platform-api:
+    image: ceo-bp/platform-api:${CEO_BP_VERSION:-dev}
+    build:
+      context: ../../services/platform-api
+    restart: unless-stopped
+    environment:
+      CEO_BP_ENV: ${CEO_BP_ENV:-demo}
+      CEO_BP_BUILD_SHA: ${CEO_BP_BUILD_SHA:-local}
+    ports:
+      - "${CEO_BP_BIND:-0.0.0.0}:${CEO_BP_PORT:-9006}:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.75
+    networks:
+      - ceo-bp
+
+networks:
+  ceo-bp:
+    name: ceo-bp-net

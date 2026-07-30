@@ -19,6 +19,7 @@
 | 发布 | [版本与发布管理](05-release/RELEASE_MANAGEMENT.md) | 版本号、制品、迁移、回滚 |
 | 验收 | [验收手册](06-acceptance/ACCEPTANCE_MANUAL.md) | UAT、业务与非功能验收流程 |
 | 运维 | [运维、安全与合规](07-operations/OPERATIONS_SECURITY.md) | SLO、监控、事件、供应链安全 |
+| 环境 | [9006 演示环境部署](08-environments/DEMO_DEPLOYMENT.md) | 独立部署、验证和回滚 |
 
 ## 文档状态
 
