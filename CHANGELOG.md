@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-31
+
 ### Added
 
 - 新增经营决策标题、目标、评价维度、权重、方向、备选方案和评分输入；
@@ -61,7 +63,8 @@
 - 建立版本、测试、验收、风险和决策记录目录及模板；
 - 增加本地文档完整性校验工具。
 
-[Unreleased]: https://github.com/tianqi0514/ceo-bp/compare/44c94030a5286f8904096cb189966811aa9dde91...HEAD
+[Unreleased]: https://github.com/tianqi0514/ceo-bp/compare/d9ec18cb5909e4b6e546fd6fc0165ac433f2f9c4...HEAD
+[0.4.0]: https://github.com/tianqi0514/ceo-bp/commit/d9ec18cb5909e4b6e546fd6fc0165ac433f2f9c4
 [0.3.1]: https://github.com/tianqi0514/ceo-bp/commit/44c94030a5286f8904096cb189966811aa9dde91
 [0.3.0]: https://github.com/tianqi0514/ceo-bp/commit/f10dc710938cf06e6825dd3478a15aea1d7f64aa
 [0.2.0]: https://github.com/tianqi0514/ceo-bp/commit/87863ef858928827dd02acec40146f97d8123e5e

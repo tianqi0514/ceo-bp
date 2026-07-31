@@ -1,8 +1,8 @@
 # TP-0.4.0-01：经营方案加权决策分析测试计划
 
-- 状态：In Progress
+- 状态：Completed
 - 需求：[REQ-2026-0001](../../requirements/REQ-2026-0001.md)
-- 候选提交：待提交
+- 候选提交：`d9ec18cb5909e4b6e546fd6fc0165ac433f2f9c4`
 - 环境：本地 macOS/Python/Node/Docker + GitHub Actions + 121.196.149.55 集成环境
 - 执行日期：2026-07-31
 - 测试责任角色：测试负责人（由 Codex 执行，项目负责人待复核）
