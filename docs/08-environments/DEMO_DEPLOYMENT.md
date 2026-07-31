@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | 文档编号 | ENV-001 |
-| 版本 | 0.3.1 |
+| 版本 | 0.4.0 |
 | 状态 | Baseline |
 | 生效日期 | 2026-07-30 |
 | 责任角色 | 运维负责人 |
@@ -48,7 +48,7 @@ CEO_BP_PORT=9006 ./deploy/scripts/deploy-demo.sh /home/tianqi/ceo-bp
 若服务器无法稳定访问 Docker Hub，可在受信任的 `linux/amd64` 构建机执行测试和镜像构建，使用 `docker save` 导出，传输后核对 SHA-256，再在服务器 `docker load`。确认目标镜像 `ceo-bp/platform-api:<version>` 已存在后执行：
 
 ```bash
-CEO_BP_VERSION=0.3.1 \
+CEO_BP_VERSION=0.4.0 \
 CEO_BP_SKIP_BUILD=1 \
 CEO_BP_PORT=9006 \
 ./deploy/scripts/deploy-demo.sh /home/tianqi/ceo-bp

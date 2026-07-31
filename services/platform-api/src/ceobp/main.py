@@ -11,9 +11,12 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 
+from ceobp.decision_analysis import analyze_decision
 from ceobp.schemas import (
     Capability,
     CapabilityList,
+    DecisionAnalysisRequest,
+    DecisionAnalysisResponse,
     EndpointInfo,
     HealthResponse,
     OverviewResponse,
@@ -163,6 +166,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             uptime_seconds=max(0, int((server_time - started_at).total_seconds())),
             endpoints=_endpoints(),
         )
+
+    @app.post(
+        "/api/v1/decisions/analyze",
+        response_model=DecisionAnalysisResponse,
+        tags=["decisions"],
+        summary="比较经营决策备选方案",
+    )
+    async def analyze(request: DecisionAnalysisRequest) -> DecisionAnalysisResponse:
+        return analyze_decision(request)
 
     static_dir = Path(runtime.static_dir)
     if (static_dir / "index.html").is_file():

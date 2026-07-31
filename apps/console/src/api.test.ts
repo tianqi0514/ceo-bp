@@ -1,26 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadOverview } from "./api";
+import { analyzeDecision, type DecisionAnalysisRequest } from "./api";
+
+const request: DecisionAnalysisRequest = {
+  title: "选择区域市场",
+  objective: "比较增长与成本",
+  criteria: [
+    { id: "growth", name: "增长", weight: 60, direction: "benefit" },
+    { id: "cost", name: "成本", weight: 40, direction: "cost" },
+  ],
+  options: [
+    { id: "a", name: "方案 A", scores: { growth: 80, cost: 70 } },
+    { id: "b", name: "方案 B", scores: { growth: 60, cost: 20 } },
+  ],
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("loadOverview", () => {
-  it("returns the typed overview payload", async () => {
+describe("analyzeDecision", () => {
+  it("posts the decision matrix and returns the typed analysis", async () => {
     const payload = {
-      info: {
-        product: "CEO-BP",
-        service: "platform-api",
-        version: "0.3.1",
-        environment: "test",
-        build_sha: "abc123",
-      },
-      health: { status: "ready", service: "platform-api", version: "0.3.1" },
-      capabilities: [],
-      started_at: "2026-07-30T10:00:00Z",
-      server_time: "2026-07-30T10:00:03Z",
-      uptime_seconds: 3,
-      endpoints: [],
+      title: request.title,
+      recommended_option_id: "b",
+      ranking: [],
+      score_gap: 8,
+      stability: "stable",
+      sensitive_criteria: [],
+      warnings: [],
+      methodology: "weighted score",
     };
     vi.stubGlobal(
       "fetch",
@@ -30,19 +38,37 @@ describe("loadOverview", () => {
       }),
     );
 
-    await expect(loadOverview()).resolves.toEqual(payload);
-    expect(fetch).toHaveBeenCalledWith("/api/v1/overview", {
-      headers: { Accept: "application/json" },
+    await expect(analyzeDecision(request)).resolves.toEqual(payload);
+    expect(fetch).toHaveBeenCalledWith("/api/v1/decisions/analyze", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
       signal: undefined,
     });
   });
 
-  it("throws a useful error for non-success responses", async () => {
+  it("explains validation failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 422 }),
+    );
+
+    await expect(analyzeDecision(request)).rejects.toThrow(
+      "输入内容未通过校验",
+    );
+  });
+
+  it("explains service failures", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, status: 503 }),
     );
 
-    await expect(loadOverview()).rejects.toThrow("平台状态请求失败（503）");
+    await expect(analyzeDecision(request)).rejects.toThrow(
+      "分析服务暂时不可用（503）",
+    );
   });
 });

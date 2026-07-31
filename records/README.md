@@ -11,5 +11,6 @@
 | [`decisions/`](decisions/README.md) | 非架构类项目/业务决策记录 |
 | [`admissions/`](admissions/README.md) | 上游组件准入与退出结论 |
 | [`environments/`](environments/README.md) | 环境基线、容量和变更证据 |
+| [`requirements/`](requirements/README.md) | 已进入交付的需求及追踪关系 |
 
 记录命名遵循 [文档控制规范](../docs/00-governance/DOCUMENT_CONTROL.md)。二进制大证据不直接提交 Git；记录其受控存储位置、校验和和保留期限。
