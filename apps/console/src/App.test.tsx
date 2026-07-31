@@ -31,6 +31,7 @@ const network = {
 
 describe("App", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.mocked(listKnowledgeNetworks).mockReset();
     vi.mocked(getKnowledgeNetwork).mockReset();
     vi.mocked(createKnowledgeNetwork).mockReset();
@@ -156,5 +157,71 @@ describe("App", () => {
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByText("还没有知识网络")).toBeVisible();
+  });
+
+  it("refreshes the list and closes focused workflows", async () => {
+    vi.mocked(getKnowledgeNetwork).mockResolvedValue(network);
+    render(<App />);
+    await screen.findByText("集团经营网络");
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新知识网络列表" }));
+    await waitFor(() => expect(listKnowledgeNetworks).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "创建知识网络" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭创建窗口" }));
+    expect(
+      screen.queryByRole("dialog", { name: "创建业务知识网络" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "创建知识网络" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(
+      screen.queryByRole("dialog", { name: "创建业务知识网络" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看详情" }));
+    expect(
+      await screen.findByRole("dialog", { name: "集团经营网络" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "返回知识网络列表" }));
+    expect(
+      screen.queryByRole("dialog", { name: "集团经营网络" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps create errors in the form and cancels an unconfirmed build", async () => {
+    vi.mocked(createKnowledgeNetwork).mockRejectedValue(
+      new Error("知识网络名称已存在。"),
+    );
+    vi.mocked(getKnowledgeNetwork).mockResolvedValue(network);
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<App />);
+    await screen.findByText("集团经营网络");
+
+    fireEvent.click(screen.getByRole("button", { name: "创建知识网络" }));
+    fireEvent.change(screen.getByLabelText("知识网络名称"), {
+      target: { value: "集团经营网络" },
+    });
+    const createForm = screen.getByLabelText("知识网络名称").closest("form");
+    expect(createForm).not.toBeNull();
+    if (createForm) fireEvent.submit(createForm);
+    expect(await screen.findByText("知识网络名称已存在。")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看详情" }));
+    expect(
+      await screen.findByRole("dialog", { name: "集团经营网络" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "触发全量构建" }));
+    expect(buildKnowledgeNetwork).not.toHaveBeenCalled();
+  });
+
+  it("uses a safe message for an unknown request failure", async () => {
+    vi.mocked(listKnowledgeNetworks).mockRejectedValue("network failed");
+    render(<App />);
+
+    expect(
+      await screen.findByText("知识网络请求失败，请稍后重试。"),
+    ).toBeVisible();
   });
 });
