@@ -1,0 +1,61 @@
+schema_version: 1
+locked_at: "2026-07-31"
+purpose: "CEO-BP KWeaver refactor source baseline"
+
+repositories:
+  - name: kweaver-core
+    url: https://github.com/kweaver-ai/kweaver-core.git
+    commit: b9b35fb245c31660127114c883e91165b42dc8f0
+    license: Apache-2.0
+    disposition: selective-keep-wrap
+    selected_components:
+      - path: adp/bkn/bkn-backend
+        role: knowledge-network-schema-and-build
+        runtime: go-1.25
+      - path: adp/bkn/ontology-query
+        role: semantic-object-graph-and-metric-query
+        runtime: go-1.25
+      - path: adp/vega/vega-backend
+        role: data-catalog-connector-and-query
+        runtime: go-1.25
+
+  - name: kweaver-dip
+    url: https://github.com/kweaver-ai/kweaver-dip.git
+    commit: 534fa829836123f36c611874829838a1ff65a4ba
+    license: Apache-2.0
+    disposition: selective-reference
+    selected_components:
+      - path: web
+        role: product-shell-and-ui-pattern-reference
+      - path: studio
+        role: knowledge-modeling-ui-reference
+      - path: chat-data
+        role: retrieval-and-conversation-gap-analysis
+
+  - name: kweaver-sdk
+    url: https://github.com/kweaver-ai/kweaver-sdk.git
+    commit: b5e7a3b5ef36604e0d7b05d688287562815add87
+    license: Apache-2.0
+    disposition: keep-as-client-and-contract-oracle
+    selected_components:
+      - path: packages/python
+        version: 0.8.4
+        role: platform-api-kweaver-client
+      - path: packages/typescript
+        role: contract-tests-and-cli-reference
+
+  - name: kweaver-admin
+    url: https://github.com/kweaver-ai/kweaver-admin.git
+    commit: 4b234dff2f6117b597467a19d4cff6d03d59ae83
+    license: Apache-2.0
+    disposition: rewrite-consolidate
+    selected_components:
+      - path: src
+        role: administrative-workflow-and-test-reference
+
+constraints:
+  - "Never resolve a branch or floating tag in reproducible builds."
+  - "Do not copy upstream example credentials or fixed LAN addresses into target configuration."
+  - "Do not admit release-manifest services whose source and license are absent."
+  - "Any local patch must reference this lock, an ADR, and a regression test."
+
