@@ -2,7 +2,7 @@
 
 CEO-BP 是面向企业经营管理者的决策分析平台。本仓库用于统一承载产品文档、架构、代码、测试、部署及全过程记录。
 
-当前仓库处于 **v0.4.0 P1 工程开发阶段**：治理基线和轻量 `platform-api` 已建立，首个用户功能可完成经营方案加权比较与敏感性分析，部署在 9006 集成环境，尚不代表生产可用版本。
+当前仓库处于 **v0.5.0-rc1 KWeaver 重构开发阶段**：已锁定并验证 KWeaver Core、DIP、SDK、Admin 源码基线，完成 BKN/ontology-query/Vega 的 Go 1.25 全模块测试，以及知识网络 Python 防腐层、API 和前端工作台。9006 仍运行历史 0.4.0 探索版本；在最小 KWeaver 运行栈和真实数据集成通过前，不升级共享环境，也不代表生产可用版本。
 
 ## 项目目标
 
@@ -20,6 +20,7 @@ CEO-BP 是面向企业经营管理者的决策分析平台。本仓库用于统�
 - [文档导航与生命周期](docs/README.md)
 - [产品范围与路线图](docs/01-product/SCOPE_AND_ROADMAP.md)
 - [目标架构](docs/02-architecture/TARGET_ARCHITECTURE.md)
+- [KWeaver 重构实施蓝图](docs/02-architecture/KWEAVER_REFACTOR_BLUEPRINT.md)
 - [迁移与复用策略](docs/02-architecture/MIGRATION_STRATEGY.md)
 - [开发工作流](docs/03-development/DEVELOPMENT_WORKFLOW.md)
 - [测试策略](docs/04-testing/TEST_STRATEGY.md)
@@ -44,7 +45,7 @@ tools/                      仓库级校验工具
 tests/                      跨模块契约、集成和验收测试
 ```
 
-当前已新增自主实现的 `platform-api` 和 `apps/console` 控制台；在完成组件准入和许可证审计前，不复制上游源码。
+当前 `platform-api` 通过锁定提交的官方 KWeaver Python SDK 调用经准入的 Go 内核，`apps/console` 正按 DIP/Vega 的业务流程逐屏迁移。上游源码尚未复制进主仓库，完整许可证、SBOM 和运行时准入完成前不发布组合二进制。
 
 ## 文档校验
 
