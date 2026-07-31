@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ceobp.decision_analysis import analyze_decision
+from ceobp.knowledge_api import create_knowledge_router
+from ceobp.kweaver_gateway import KWeaverGatewayError, KWeaverKnowledgeNetworkGateway
 from ceobp.schemas import (
     Capability,
     CapabilityList,
@@ -84,9 +89,25 @@ def _endpoints() -> list[EndpointInfo]:
     ]
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    knowledge_network_gateway: KWeaverKnowledgeNetworkGateway | None = None,
+) -> FastAPI:
     runtime = settings or Settings.from_environment()
     started_at = datetime.now(UTC)
+    owns_gateway = knowledge_network_gateway is None and runtime.kweaver_configured
+    gateway = knowledge_network_gateway
+    if gateway is None and runtime.kweaver_configured:
+        gateway = KWeaverKnowledgeNetworkGateway.from_settings(runtime)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if owns_gateway and gateway is not None:
+                gateway.close()
+
     app = FastAPI(
         title=runtime.product_name,
         summary="企业经营决策分析平台统一 API",
@@ -94,8 +115,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/docs",
         redoc_url=None,
         openapi_url="/openapi.json",
+        lifespan=lifespan,
     )
     app.state.settings = runtime
+
+    @app.exception_handler(KWeaverGatewayError)
+    async def kweaver_error_handler(
+        request: Request,
+        exc: KWeaverGatewayError,
+    ) -> JSONResponse:
+        status_code = _kweaver_error_status(exc.code)
+        payload: dict[str, Any] = {
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "retryable": exc.retryable,
+            },
+            "request_id": getattr(request.state, "request_id", None),
+        }
+        return JSONResponse(status_code=status_code, content=payload)
 
     @app.middleware("http")
     async def request_context(
@@ -176,6 +214,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def analyze(request: DecisionAnalysisRequest) -> DecisionAnalysisResponse:
         return analyze_decision(request)
 
+    app.include_router(create_knowledge_router(gateway))
+
     static_dir = Path(runtime.static_dir)
     if (static_dir / "index.html").is_file():
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="console")
@@ -199,3 +239,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 app = create_app()
+
+
+def _kweaver_error_status(code: str) -> int:
+    if code == "KNOWLEDGE_NETWORK_NOT_FOUND":
+        return 404
+    if code == "KWEAVER_VALIDATION_FAILED":
+        return 422
+    if code == "KWEAVER_CONFLICT":
+        return 409
+    if code in {"KWEAVER_UNAVAILABLE", "KWEAVER_NOT_CONFIGURED"}:
+        return 503
+    return 502
