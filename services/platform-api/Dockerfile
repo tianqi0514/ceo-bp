@@ -19,7 +19,11 @@ RUN groupadd --gid 10001 ceobp \
     && useradd --uid 10001 --gid ceobp --no-create-home --shell /usr/sbin/nologin ceobp
 
 COPY services/platform-api/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --requirement requirements.txt
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends git \
+    && pip install --no-cache-dir --requirement requirements.txt \
+    && apt-get purge --yes --auto-remove git \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY services/platform-api/src ./src
 COPY --from=console-builder /console/dist ./static
