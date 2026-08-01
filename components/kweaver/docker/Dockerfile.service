@@ -1,0 +1,40 @@
+ARG GO_IMAGE=golang:1.25-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54d34a0fbfd2c4d51c9d58
+FROM ${GO_IMAGE} AS builder
+
+ARG BINARY_NAME
+ARG SERVICE_VERSION
+ARG VERSION_PACKAGE
+
+ENV CGO_ENABLED=0 \
+    GOTOOLCHAIN=local
+
+WORKDIR /src
+COPY . .
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    test -n "${BINARY_NAME}" \
+    && test -n "${SERVICE_VERSION}" \
+    && test -n "${VERSION_PACKAGE}" \
+    && go mod download \
+    && go build \
+      -trimpath \
+      -ldflags "-s -w -X '${VERSION_PACKAGE}.ServerVersion=${SERVICE_VERSION}'" \
+      -o "/out/${BINARY_NAME}" \
+      .
+
+FROM scratch AS runtime
+
+ARG BINARY_NAME
+ARG SERVICE_PORT
+
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder "/out/${BINARY_NAME}" /opt/kweaver/server
+COPY --from=builder /src/config /opt/kweaver/config
+COPY --from=builder /src/locale /opt/kweaver/locale
+
+WORKDIR /opt/kweaver
+USER 10001:10001
+EXPOSE ${SERVICE_PORT}
+ENTRYPOINT ["/opt/kweaver/server"]
