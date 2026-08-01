@@ -1,0 +1,128 @@
+name: ceobp-kweaver-p2
+
+services:
+  mariadb:
+    image: mariadb:11.4.7
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: kweaver
+      MARIADB_USER: ceobp
+      MARIADB_PASSWORD: ${CEO_BP_KWEAVER_DB_PASSWORD:?set CEO_BP_KWEAVER_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${CEO_BP_KWEAVER_DB_ROOT_PASSWORD:?set CEO_BP_KWEAVER_DB_ROOT_PASSWORD}
+    volumes:
+      - ceobp-kweaver-mariadb:/var/lib/mysql
+      - type: bind
+        source: ${KWEAVER_CORE_DIR:?set KWEAVER_CORE_DIR}/adp/vega/vega-backend/migrations/mariadb/0.9.0/init.sql
+        target: /docker-entrypoint-initdb.d/10-vega.sql
+        read_only: true
+      - type: bind
+        source: ${KWEAVER_CORE_DIR:?set KWEAVER_CORE_DIR}/adp/bkn/bkn-backend/migrations/mariadb/0.8.0/init.sql
+        target: /docker-entrypoint-initdb.d/20-bkn.sql
+        read_only: true
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 768m
+    cpus: 1.0
+    networks:
+      - ceobp-kweaver
+
+  redis:
+    image: redis:7.4.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    read_only: true
+    tmpfs:
+      - /data:size=32m,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 128m
+    cpus: 0.25
+    networks:
+      - ceobp-kweaver
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - ceobp-kweaver-opensearch:/usr/share/opensearch/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail --silent http://localhost:9200/_cluster/health?wait_for_status=yellow >/dev/null",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 1g
+    cpus: 1.0
+    networks:
+      - ceobp-kweaver
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.5
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+      - --memory
+      - 512M
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - internal://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health", "--brokers=localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 640m
+    cpus: 0.75
+    networks:
+      - ceobp-kweaver
+
+networks:
+  ceobp-kweaver:
+    name: ceobp-kweaver-p2-net
+
+volumes:
+  ceobp-kweaver-mariadb:
+    name: ceobp-kweaver-p2-mariadb
+  ceobp-kweaver-opensearch:
+    name: ceobp-kweaver-p2-opensearch
