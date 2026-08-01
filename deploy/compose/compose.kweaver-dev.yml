@@ -117,11 +117,168 @@ services:
     networks:
       - ceobp-kweaver
 
+  config-init:
+    image: alpine@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+    restart: "no"
+    command:
+      - sh
+      - -ec
+      - >-
+        install -o 10001 -g 10001 -m 0400 /source/bkn-backend-config.yaml /runtime/ &&
+        install -o 10001 -g 10001 -m 0400 /source/ontology-query-config.yaml /runtime/ &&
+        install -o 10001 -g 10001 -m 0400 /source/vega-backend-config.yaml /runtime/
+    volumes:
+      - type: bind
+        source: ${CEO_BP_KWEAVER_RUNTIME_DIR:?set CEO_BP_KWEAVER_RUNTIME_DIR}/config
+        target: /source
+        read_only: true
+      - ceobp-kweaver-config:/runtime
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 32
+    mem_limit: 32m
+    cpus: 0.1
+    networks:
+      - ceobp-kweaver
+
+  vega:
+    image: ceobp/kweaver-vega:${CEO_BP_KWEAVER_IMAGE_VERSION:-0.5.0-p2}
+    restart: unless-stopped
+    environment:
+      AUTH_ENABLED: "false"
+      DEBUG_MODE: "false"
+      TZ: Asia/Shanghai
+    volumes:
+      - ceobp-kweaver-config:/opt/kweaver/config:ro
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /opt/vega-backend:size=16m,uid=10001,gid=10001,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+    networks:
+      - ceobp-kweaver
+
+  bkn:
+    image: ceobp/kweaver-bkn:${CEO_BP_KWEAVER_IMAGE_VERSION:-0.5.0-p2}
+    restart: unless-stopped
+    environment:
+      AUTH_ENABLED: "false"
+      BUSINESS_DOMAIN_ENABLED: "false"
+      TZ: Asia/Shanghai
+    volumes:
+      - ceobp-kweaver-config:/opt/kweaver/config:ro
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      vega:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /opt/bkn-backend:size=16m,uid=10001,gid=10001,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+    networks:
+      - ceobp-kweaver
+
+  ontology-query:
+    image: ceobp/kweaver-ontology-query:${CEO_BP_KWEAVER_IMAGE_VERSION:-0.5.0-p2}
+    restart: unless-stopped
+    environment:
+      AUTH_ENABLED: "false"
+      TZ: Asia/Shanghai
+    volumes:
+      - ceobp-kweaver-config:/opt/kweaver/config:ro
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      bkn:
+        condition: service_started
+      opensearch:
+        condition: service_healthy
+      vega:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /opt/ontology-query:size=16m,uid=10001,gid=10001,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 384m
+    cpus: 0.75
+    networks:
+      - ceobp-kweaver
+
+  platform-api:
+    image: ceobp/platform-api:${CEO_BP_PLATFORM_IMAGE_VERSION:-0.5.0-rc1}
+    restart: unless-stopped
+    environment:
+      CEO_BP_ENV: development
+      CEO_BP_BUILD_SHA: ${CEO_BP_BUILD_SHA:-local-p2}
+      CEO_BP_KWEAVER_BASE_URL: http://bkn:13014
+      CEO_BP_KWEAVER_BUSINESS_DOMAIN: bd_public
+      CEO_BP_KWEAVER_NO_AUTH: "true"
+      CEO_BP_KWEAVER_TIMEOUT_SECONDS: "10"
+    ports:
+      - "${CEO_BP_KWEAVER_BIND:-127.0.0.1}:${CEO_BP_KWEAVER_PORT:-19006}:8000"
+    depends_on:
+      bkn:
+        condition: service_started
+      ontology-query:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 384m
+    cpus: 0.75
+    networks:
+      - ceobp-kweaver
+
 networks:
   ceobp-kweaver:
     name: ceobp-kweaver-p2-net
 
 volumes:
+  ceobp-kweaver-config:
+    name: ceobp-kweaver-p2-config
   ceobp-kweaver-mariadb:
     name: ceobp-kweaver-p2-mariadb
   ceobp-kweaver-opensearch:
