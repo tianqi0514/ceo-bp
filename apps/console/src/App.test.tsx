@@ -8,10 +8,11 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import {
-  buildKnowledgeNetwork,
   createKnowledgeNetwork,
+  createObjectType,
   getKnowledgeNetwork,
   listKnowledgeNetworks,
+  listObjectTypes,
 } from "./knowledgeApi";
 
 vi.mock("./knowledgeApi", () => ({
@@ -19,6 +20,8 @@ vi.mock("./knowledgeApi", () => ({
   getKnowledgeNetwork: vi.fn(),
   createKnowledgeNetwork: vi.fn(),
   buildKnowledgeNetwork: vi.fn(),
+  listObjectTypes: vi.fn(),
+  createObjectType: vi.fn(),
 }));
 
 const network = {
@@ -29,18 +32,36 @@ const network = {
   statistics: null,
 };
 
+const customerObject = {
+  id: "ot-customer",
+  knowledge_network_id: "kn-1",
+  name: "客户",
+  primary_keys: ["customer_id"],
+  display_key: "customer_name",
+  fields: [
+    { name: "customer_id", display_name: "客户编号", type: "string" as const },
+    {
+      name: "customer_name",
+      display_name: "客户名称",
+      type: "string" as const,
+    },
+  ],
+};
+
 describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.mocked(listKnowledgeNetworks).mockReset();
     vi.mocked(getKnowledgeNetwork).mockReset();
     vi.mocked(createKnowledgeNetwork).mockReset();
-    vi.mocked(buildKnowledgeNetwork).mockReset();
+    vi.mocked(listObjectTypes).mockReset();
+    vi.mocked(createObjectType).mockReset();
     vi.mocked(listKnowledgeNetworks).mockResolvedValue({
       items: [network],
       offset: 0,
       limit: 50,
     });
+    vi.mocked(listObjectTypes).mockResolvedValue({ items: [] });
   });
 
   it("opens on the real KWeaver knowledge-network task", async () => {
@@ -112,7 +133,7 @@ describe("App", () => {
     expect(listKnowledgeNetworks).toHaveBeenCalledTimes(2);
   });
 
-  it("loads detail and submits a confirmed full build", async () => {
+  it("loads detail and shows the real object schema", async () => {
     vi.mocked(getKnowledgeNetwork).mockResolvedValue({
       ...network,
       statistics: {
@@ -122,23 +143,18 @@ describe("App", () => {
         concept_groups: 4,
       },
     });
-    vi.mocked(buildKnowledgeNetwork).mockResolvedValue({
-      knowledge_network_id: "kn-1",
-      state: "accepted",
-    });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(listObjectTypes).mockResolvedValue({ items: [customerObject] });
     render(<App />);
     await screen.findByText("集团经营网络");
 
     fireEvent.click(screen.getByRole("button", { name: "查看详情" }));
     expect(await screen.findByText("对象类型")).toBeVisible();
     expect(screen.getByText("3")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "触发全量构建" }));
-
-    await waitFor(() =>
-      expect(buildKnowledgeNetwork).toHaveBeenCalledWith("kn-1"),
-    );
-    expect(await screen.findByText(/全量构建任务已提交/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "经营对象" })).toBeVisible();
+    expect(screen.getByText("客户编号")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "触发全量构建" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows an actionable empty integration error and retries", async () => {
@@ -192,7 +208,7 @@ describe("App", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps create errors in the form and cancels an unconfirmed build", async () => {
+  it("keeps create errors in the form", async () => {
     vi.mocked(createKnowledgeNetwork).mockRejectedValue(
       new Error("知识网络名称已存在。"),
     );
@@ -205,7 +221,6 @@ describe("App", () => {
         concept_groups: 0,
       },
     });
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<App />);
     await screen.findByText("集团经营网络");
 
@@ -223,8 +238,6 @@ describe("App", () => {
     expect(
       await screen.findByRole("dialog", { name: "集团经营网络" }),
     ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "触发全量构建" }));
-    expect(buildKnowledgeNetwork).not.toHaveBeenCalled();
   });
 
   it("uses a safe message for an unknown request failure", async () => {
@@ -234,5 +247,54 @@ describe("App", () => {
     expect(
       await screen.findByText("知识网络请求失败，请稍后重试。"),
     ).toBeVisible();
+  });
+
+  it("creates a meaningful object type with declared keys and fields", async () => {
+    vi.mocked(getKnowledgeNetwork).mockResolvedValue(network);
+    vi.mocked(createObjectType).mockResolvedValue(customerObject);
+    render(<App />);
+    await screen.findByText("集团经营网络");
+
+    fireEvent.click(screen.getByRole("button", { name: "查看详情" }));
+    expect(
+      await screen.findByRole("button", { name: "新增对象类型" }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "新增对象类型" }));
+
+    const dialog = screen.getByRole("dialog", { name: "新增经营对象类型" });
+    fireEvent.change(within(dialog).getByLabelText("对象类型名称"), {
+      target: { value: "客户" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("字段1代码"), {
+      target: { value: "customer_id" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("字段1业务名称"), {
+      target: { value: "客户编号" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("字段2代码"), {
+      target: { value: "customer_name" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("字段2业务名称"), {
+      target: { value: "客户名称" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "创建对象类型" }),
+    );
+
+    await waitFor(() =>
+      expect(createObjectType).toHaveBeenCalledWith("kn-1", {
+        name: "客户",
+        primary_key: "customer_id",
+        display_key: "customer_name",
+        fields: [
+          { name: "customer_id", display_name: "客户编号", type: "string" },
+          { name: "customer_name", display_name: "客户名称", type: "string" },
+        ],
+      }),
+    );
+    expect(await screen.findByText("客户名称")).toBeVisible();
+    expect(
+      screen.queryByRole("dialog", { name: "新增经营对象类型" }),
+    ).not.toBeInTheDocument();
   });
 });

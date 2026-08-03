@@ -15,12 +15,15 @@ import {
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
-  buildKnowledgeNetwork,
   createKnowledgeNetwork,
+  createObjectType,
   getKnowledgeNetwork,
   type KnowledgeNetwork,
   listKnowledgeNetworks,
+  listObjectTypes,
+  type ObjectType,
 } from "./knowledgeApi";
+import { ObjectTypeDialog } from "./ObjectTypeDialog";
 
 interface CreateDraft {
   name: string;
@@ -54,8 +57,15 @@ function App() {
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<KnowledgeNetwork | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [building, setBuilding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
+  const [objectTypesLoading, setObjectTypesLoading] = useState(false);
+  const [objectTypesError, setObjectTypesError] = useState<string | null>(null);
+  const [objectCreateOpen, setObjectCreateOpen] = useState(false);
+  const [objectCreating, setObjectCreating] = useState(false);
+  const [objectCreateError, setObjectCreateError] = useState<string | null>(
+    null,
+  );
 
   const loadNetworks = useCallback(
     async (pattern: string, signal?: AbortSignal) => {
@@ -94,7 +104,19 @@ function App() {
     setError(null);
     setNotice(null);
     try {
-      setSelected(await getKnowledgeNetwork(id));
+      const detail = await getKnowledgeNetwork(id);
+      setSelected(detail);
+      setObjectTypes([]);
+      setObjectTypesLoading(true);
+      setObjectTypesError(null);
+      try {
+        const page = await listObjectTypes(id);
+        setObjectTypes(page.items);
+      } catch (reason) {
+        setObjectTypesError(errorMessage(reason));
+      } finally {
+        setObjectTypesLoading(false);
+      }
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -128,6 +150,7 @@ function App() {
       setCreateOpen(false);
       setCreateDraft(emptyDraft);
       setSelected(created);
+      setObjectTypes([]);
       setNotice(`已创建“${created.name}”，可继续定义对象、关系和指标。`);
       await loadNetworks(activeSearch);
     } catch (reason) {
@@ -137,21 +160,40 @@ function App() {
     }
   };
 
-  const triggerBuild = async () => {
+  const reloadObjectTypes = async () => {
     if (!selected) return;
-    const confirmed = window.confirm(
-      `确认对“${selected.name}”执行一次全量构建？该操作会按当前模式重新生成索引。`,
-    );
-    if (!confirmed) return;
-    setBuilding(true);
-    setNotice(null);
+    setObjectTypesLoading(true);
+    setObjectTypesError(null);
     try {
-      await buildKnowledgeNetwork(selected.id);
-      setNotice(`“${selected.name}”的全量构建任务已提交。`);
+      const page = await listObjectTypes(selected.id);
+      setObjectTypes(page.items);
     } catch (reason) {
-      setError(errorMessage(reason));
+      setObjectTypesError(errorMessage(reason));
     } finally {
-      setBuilding(false);
+      setObjectTypesLoading(false);
+    }
+  };
+
+  const submitObjectType = async (
+    input: Parameters<typeof createObjectType>[1],
+  ) => {
+    if (!selected) return;
+    setObjectCreating(true);
+    setObjectCreateError(null);
+    try {
+      const created = await createObjectType(selected.id, input);
+      setObjectTypes((current) => [...current, created]);
+      setObjectCreateOpen(false);
+      setNotice(`已在“${selected.name}”中创建经营对象“${created.name}”。`);
+      try {
+        setSelected(await getKnowledgeNetwork(selected.id));
+      } catch {
+        // The created object is already authoritative; a statistics refresh may retry later.
+      }
+    } catch (reason) {
+      setObjectCreateError(errorMessage(reason));
+    } finally {
+      setObjectCreating(false);
     }
   };
 
@@ -191,7 +233,7 @@ function App() {
           </button>
         </div>
 
-        {notice ? (
+        {notice && !selected ? (
           <div className="notice success" role="status">
             {notice}
           </div>
@@ -201,7 +243,7 @@ function App() {
           <div className="workspace-header">
             <div>
               <h2 id="network-list-heading">业务知识网络</h2>
-              <p>选择一个网络查看其模式规模或触发构建。</p>
+              <p>选择一个网络查看其业务范围和经营对象。</p>
             </div>
             <div className="toolbar">
               <form className="search-form" onSubmit={submitSearch}>
@@ -417,6 +459,11 @@ function App() {
               </div>
             </div>
             <div className="detail-body">
+              {notice ? (
+                <div className="notice success" role="status">
+                  {notice}
+                </div>
+              ) : null}
               <dl className="detail-list">
                 <div>
                   <dt>网络 ID</dt>
@@ -456,30 +503,87 @@ function App() {
                   value={selected.statistics?.concept_groups}
                 />
               </div>
-              {(selected.statistics?.object_types ?? 0) > 0 ? (
-                <div className="build-panel">
+              <section
+                className="object-section"
+                aria-labelledby="object-types-heading"
+              >
+                <div className="section-heading">
                   <div>
-                    <h3>构建知识网络</h3>
-                    <p>按当前对象、关系和指标定义重新生成查询索引。</p>
+                    <h3 id="object-types-heading">经营对象</h3>
+                    <p>定义决策分析中可识别、关联和查询的业务实体。</p>
                   </div>
                   <button
-                    className="button primary"
-                    disabled={building}
+                    className="button secondary"
                     type="button"
-                    onClick={() => void triggerBuild()}
+                    onClick={() => {
+                      setObjectCreateError(null);
+                      setObjectCreateOpen(true);
+                    }}
                   >
-                    {building ? (
-                      <LoaderCircle className="spin" size={16} />
-                    ) : (
-                      <Play size={16} />
-                    )}
-                    {building ? "正在提交" : "触发全量构建"}
+                    <Plus size={15} /> 新增对象类型
                   </button>
                 </div>
-              ) : null}
+                {objectTypesLoading ? (
+                  <div className="object-state" role="status">
+                    <LoaderCircle className="spin" size={17} />{" "}
+                    正在读取经营对象…
+                  </div>
+                ) : objectTypesError ? (
+                  <div className="object-state error-panel" role="alert">
+                    <span>{objectTypesError}</span>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => void reloadObjectTypes()}
+                    >
+                      重试
+                    </button>
+                  </div>
+                ) : objectTypes.length === 0 ? (
+                  <div className="object-state empty-state">
+                    <strong>尚未定义经营对象</strong>
+                    <p>先创建客户、产品、组织等对象，再配置关系和指标。</p>
+                  </div>
+                ) : (
+                  <div className="object-list">
+                    {objectTypes.map((objectType) => (
+                      <article className="object-item" key={objectType.id}>
+                        <div className="object-title">
+                          <strong>{objectType.name}</strong>
+                          <span>{objectType.fields.length} 个字段</span>
+                        </div>
+                        <div className="object-fields">
+                          {objectType.fields.map((field) => (
+                            <span key={field.name}>
+                              <b>{field.display_name}</b>
+                              <code>{field.name}</code>
+                              {objectType.primary_keys.includes(field.name) ? (
+                                <em>主键</em>
+                              ) : null}
+                              {objectType.display_key === field.name ? (
+                                <em>显示</em>
+                              ) : null}
+                            </span>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
             </div>
           </aside>
         </div>
+      ) : null}
+
+      {selected && objectCreateOpen ? (
+        <ObjectTypeDialog
+          busy={objectCreating}
+          error={objectCreateError}
+          networkName={selected.name}
+          onClose={() => setObjectCreateOpen(false)}
+          onSubmit={(input) => void submitObjectType(input)}
+        />
       ) : null}
     </div>
   );

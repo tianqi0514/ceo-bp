@@ -222,7 +222,15 @@ services:
       - -ec
       - >-
         for attempt in $$(seq 1 60); do
-          if wget -q -O /dev/null --post-data='' http://vega:13014/api/vega-backend/in/v1/catalogs/adp_bkn_catalog/enable;
+          if ! wget -q -O /dev/null http://vega:13014/api/vega-backend/in/v1/catalogs/ceobp_business_catalog;
+          then
+            wget -q -O /dev/null
+              --header='Content-Type: application/json'
+              --post-data='{"id":"ceobp_business_catalog","name":"CEO-BP 经营对象数据集","tags":["CEO-BP","经营数据"],"description":"CEO-BP 管理的经营对象字段与数据集","enabled":true,"connector_type":"","connector_config":{}}'
+              http://vega:13014/api/vega-backend/in/v1/catalogs || true;
+          fi;
+          if wget -q -O /dev/null --post-data='' http://vega:13014/api/vega-backend/in/v1/catalogs/adp_bkn_catalog/enable &&
+             wget -q -O /dev/null --post-data='' http://vega:13014/api/vega-backend/in/v1/catalogs/ceobp_business_catalog/enable;
           then exit 0; fi;
           sleep 1;
         done;
@@ -283,6 +291,8 @@ services:
       CEO_BP_ENV: development
       CEO_BP_BUILD_SHA: ${CEO_BP_BUILD_SHA:-local-p2}
       CEO_BP_KWEAVER_BASE_URL: http://bkn:13014
+      CEO_BP_KWEAVER_VEGA_BASE_URL: http://vega:13014
+      CEO_BP_KWEAVER_MANAGED_CATALOG_ID: ceobp_business_catalog
       CEO_BP_KWEAVER_BUSINESS_DOMAIN: bd_public
       CEO_BP_KWEAVER_NO_AUTH: "true"
       CEO_BP_KWEAVER_TIMEOUT_SECONDS: "10"

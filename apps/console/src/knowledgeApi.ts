@@ -30,6 +30,39 @@ export interface BuildReceipt {
   state: "accepted";
 }
 
+export type ObjectFieldType =
+  | "string"
+  | "integer"
+  | "decimal"
+  | "datetime"
+  | "boolean";
+
+export interface ObjectTypeField {
+  name: string;
+  display_name: string;
+  type: ObjectFieldType;
+}
+
+export interface ObjectType {
+  id: string;
+  knowledge_network_id: string;
+  name: string;
+  primary_keys: string[];
+  display_key: string;
+  fields: ObjectTypeField[];
+}
+
+export interface ObjectTypePage {
+  items: ObjectType[];
+}
+
+export interface CreateObjectTypeRequest {
+  name: string;
+  primary_key: string;
+  display_key: string;
+  fields: ObjectTypeField[];
+}
+
 interface ApiErrorPayload {
   error?: {
     code?: string;
@@ -119,5 +152,26 @@ export function buildKnowledgeNetwork(
   return request(
     `/api/v1/knowledge-networks/${encodeURIComponent(id)}/builds`,
     { method: "POST", signal },
+  );
+}
+
+export function listObjectTypes(
+  knowledgeNetworkId: string,
+  signal?: AbortSignal,
+): Promise<ObjectTypePage> {
+  return request(
+    `/api/v1/knowledge-networks/${encodeURIComponent(knowledgeNetworkId)}/object-types`,
+    { signal },
+  );
+}
+
+export function createObjectType(
+  knowledgeNetworkId: string,
+  input: CreateObjectTypeRequest,
+  signal?: AbortSignal,
+): Promise<ObjectType> {
+  return request(
+    `/api/v1/knowledge-networks/${encodeURIComponent(knowledgeNetworkId)}/object-types`,
+    { method: "POST", body: JSON.stringify(input), signal },
   );
 }

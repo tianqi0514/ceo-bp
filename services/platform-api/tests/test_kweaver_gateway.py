@@ -4,11 +4,18 @@ import httpx
 import pytest
 from kweaver import KWeaverClient
 
-from ceobp.kweaver_gateway import KWeaverGatewayError, KWeaverKnowledgeNetworkGateway
+from ceobp.kweaver_gateway import (
+    KWeaverGatewayError,
+    KWeaverKnowledgeNetworkGateway,
+    ObjectTypeField,
+)
 from ceobp.settings import Settings
 
 
-def _gateway(handler: httpx.MockTransport) -> KWeaverKnowledgeNetworkGateway:
+def _gateway(
+    handler: httpx.MockTransport,
+    vega_handler: httpx.MockTransport | None = None,
+) -> KWeaverKnowledgeNetworkGateway:
     client = KWeaverClient(
         "https://kweaver.internal",
         token="Bearer service-token",
@@ -16,7 +23,14 @@ def _gateway(handler: httpx.MockTransport) -> KWeaverKnowledgeNetworkGateway:
         timeout=1,
         transport=handler,
     )
-    return KWeaverKnowledgeNetworkGateway(client)
+    vega_client = KWeaverClient(
+        "https://vega.internal",
+        token="Bearer service-token",
+        business_domain="bd_ceobp",
+        timeout=1,
+        transport=vega_handler or handler,
+    )
+    return KWeaverKnowledgeNetworkGateway(client, vega_client=vega_client)
 
 
 def test_list_uses_official_sdk_contract_and_maps_owned_dto() -> None:
@@ -160,6 +174,253 @@ def test_create_and_build_have_explicit_upstream_side_effects() -> None:
         "/api/ontology-manager/v1/knowledge-networks/kn-new/jobs",
     )
     assert requests[3][2]["job_type"] == "full"
+
+
+def test_list_object_types_maps_sdk_models_to_owned_contract() -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == (
+            "/api/ontology-manager/v1/knowledge-networks/kn-1/object-types"
+        )
+        assert request.url.params["branch"] == "main"
+        assert request.url.params["limit"] == "-1"
+        return httpx.Response(
+            200,
+            json={
+                "entries": [
+                    {
+                        "id": "ot-customer",
+                        "name": "客户",
+                        "data_source": {"type": "resource", "id": "res-customer"},
+                        "primary_keys": ["customer_id"],
+                        "display_key": "customer_name",
+                        "data_properties": [
+                            {
+                                "name": "customer_id",
+                                "display_name": "客户编号",
+                                "type": "string",
+                            },
+                            {
+                                "name": "customer_name",
+                                "display_name": "客户名称",
+                                "type": "string",
+                            },
+                        ],
+                    }
+                ]
+            },
+        )
+
+    gateway = _gateway(httpx.MockTransport(handle))
+    try:
+        items = gateway.list_object_types("kn-1")
+    finally:
+        gateway.close()
+
+    assert [item.model_dump() for item in items] == [
+        {
+            "id": "ot-customer",
+            "knowledge_network_id": "kn-1",
+            "name": "客户",
+            "primary_keys": ["customer_id"],
+            "display_key": "customer_name",
+            "fields": [
+                {
+                    "name": "customer_id",
+                    "display_name": "客户编号",
+                    "type": "string",
+                },
+                {
+                    "name": "customer_name",
+                    "display_name": "客户名称",
+                    "type": "string",
+                },
+            ],
+        }
+    ]
+
+
+def test_create_object_type_provisions_dataset_then_reads_sparse_sdk_response() -> None:
+    bkn_calls: list[tuple[str, str, dict[str, object]]] = []
+    vega_calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def bkn_handle(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else {}
+        bkn_calls.append((request.method, request.url.path, body))
+        if request.method == "POST":
+            return httpx.Response(201, json=[{"id": "ot-new"}])
+        return httpx.Response(
+            200,
+            json={
+                "id": "ot-new",
+                "name": "客户",
+                "data_source": {"type": "resource", "id": "res-new"},
+                "primary_keys": ["customer_id"],
+                "display_key": "customer_name",
+                "data_properties": [
+                    {
+                        "name": "customer_id",
+                        "display_name": "客户编号",
+                        "type": "string",
+                    },
+                    {
+                        "name": "customer_name",
+                        "display_name": "客户名称",
+                        "type": "string",
+                    },
+                ],
+            },
+        )
+
+    def vega_handle(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else {}
+        vega_calls.append((request.method, request.url.path, body))
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "res-new"})
+        return httpx.Response(
+            200,
+            json={
+                "entries": [
+                    {
+                        "id": "res-new",
+                        "name": "managed-object-dataset",
+                        "catalog_id": "ceobp_business_catalog",
+                        "category": "dataset",
+                        "schema_definition": body.get("schema_definition", []),
+                    }
+                ]
+            },
+        )
+
+    gateway = _gateway(
+        httpx.MockTransport(bkn_handle),
+        httpx.MockTransport(vega_handle),
+    )
+    fields = [
+        ObjectTypeField(name="customer_id", display_name="客户编号", type="string"),
+        ObjectTypeField(name="customer_name", display_name="客户名称", type="string"),
+    ]
+    try:
+        created = gateway.create_object_type(
+            "kn-1",
+            name="客户",
+            fields=fields,
+            primary_keys=["customer_id"],
+            display_key="customer_name",
+        )
+    finally:
+        gateway.close()
+
+    assert created.id == "ot-new"
+    assert created.name == "客户"
+    assert vega_calls[0][0:2] == ("POST", "/api/vega-backend/v1/resources")
+    assert vega_calls[0][2]["catalog_id"] == "ceobp_business_catalog"
+    assert vega_calls[0][2]["category"] == "dataset"
+    assert vega_calls[0][2]["schema_definition"] == [
+        {"name": "customer_id", "display_name": "客户编号", "type": "string"},
+        {"name": "customer_name", "display_name": "客户名称", "type": "string"},
+    ]
+    assert bkn_calls[0] == (
+        "POST",
+        "/api/ontology-manager/v1/knowledge-networks/kn-1/object-types",
+        {
+            "entries": [
+                {
+                    "name": "客户",
+                    "branch": "main",
+                    "data_source": {"type": "resource", "id": "res-new"},
+                    "primary_keys": ["customer_id"],
+                    "display_key": "customer_name",
+                    "data_properties": [
+                        {
+                            "name": "customer_id",
+                            "display_name": "客户编号",
+                            "type": "string",
+                            "mapped_field": {
+                                "name": "customer_id",
+                                "type": "string",
+                                "display_name": "客户编号",
+                            },
+                            "index_config": {
+                                "keyword_config": {"enabled": False},
+                                "fulltext_config": {"enabled": False},
+                                "vector_config": {"enabled": False},
+                            },
+                        },
+                        {
+                            "name": "customer_name",
+                            "display_name": "客户名称",
+                            "type": "string",
+                            "mapped_field": {
+                                "name": "customer_name",
+                                "type": "string",
+                                "display_name": "客户名称",
+                            },
+                            "index_config": {
+                                "keyword_config": {"enabled": False},
+                                "fulltext_config": {"enabled": False},
+                                "vector_config": {"enabled": False},
+                            },
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+    assert bkn_calls[1][0:2] == (
+        "GET",
+        "/api/ontology-manager/v1/knowledge-networks/kn-1/object-types/ot-new",
+    )
+
+
+def test_create_object_type_removes_managed_dataset_when_bkn_rejects_it() -> None:
+    vega_methods: list[str] = []
+
+    def bkn_handle(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"message": "invalid object type"})
+
+    def vega_handle(request: httpx.Request) -> httpx.Response:
+        vega_methods.append(request.method)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "res-orphan"})
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {
+                            "id": "res-orphan",
+                            "name": "managed-object-dataset",
+                            "catalog_id": "ceobp_business_catalog",
+                            "category": "dataset",
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(204)
+
+    gateway = _gateway(
+        httpx.MockTransport(bkn_handle),
+        httpx.MockTransport(vega_handle),
+    )
+    try:
+        with pytest.raises(KWeaverGatewayError, match="rejected"):
+            gateway.create_object_type(
+                "kn-1",
+                name="客户",
+                fields=[
+                    ObjectTypeField(
+                        name="customer_id",
+                        display_name="客户编号",
+                        type="string",
+                    )
+                ],
+                primary_keys=["customer_id"],
+                display_key="customer_id",
+            )
+    finally:
+        gateway.close()
+
+    assert vega_methods == ["POST", "GET", "DELETE"]
 
 
 def test_upstream_error_is_sanitized_and_marked_retryable() -> None:

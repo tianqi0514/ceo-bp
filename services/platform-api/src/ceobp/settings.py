@@ -17,6 +17,8 @@ class Settings:
     build_sha: str = "local"
     static_dir: str = "/app/static"
     kweaver_base_url: str = ""
+    kweaver_vega_base_url: str = ""
+    kweaver_managed_catalog_id: str = "ceobp_business_catalog"
     kweaver_token: str = field(default="", repr=False)
     kweaver_business_domain: str = "bd_public"
     kweaver_timeout_seconds: float = 10.0
@@ -32,6 +34,10 @@ class Settings:
             raise ValueError("Configured KWeaver requires a token or explicit no-auth mode")
         if not self.kweaver_base_url and (self.kweaver_token or self.kweaver_no_auth):
             raise ValueError("KWeaver base URL is required when authentication is configured")
+        if self.kweaver_vega_base_url and not self.kweaver_base_url:
+            raise ValueError("KWeaver base URL is required when Vega is configured")
+        if not self.kweaver_managed_catalog_id:
+            raise ValueError("KWeaver managed catalog ID is required")
         if self.environment == "production" and (
             self.kweaver_no_auth or self.kweaver_tls_insecure
         ):
@@ -48,6 +54,12 @@ class Settings:
             build_sha=os.getenv("CEO_BP_BUILD_SHA", "local"),
             static_dir=os.getenv("CEO_BP_STATIC_DIR", "/app/static"),
             kweaver_base_url=os.getenv("CEO_BP_KWEAVER_BASE_URL", "").rstrip("/"),
+            kweaver_vega_base_url=os.getenv(
+                "CEO_BP_KWEAVER_VEGA_BASE_URL", ""
+            ).rstrip("/"),
+            kweaver_managed_catalog_id=os.getenv(
+                "CEO_BP_KWEAVER_MANAGED_CATALOG_ID", "ceobp_business_catalog"
+            ),
             kweaver_token=os.getenv("CEO_BP_KWEAVER_TOKEN", ""),
             kweaver_business_domain=os.getenv(
                 "CEO_BP_KWEAVER_BUSINESS_DOMAIN", "bd_public"

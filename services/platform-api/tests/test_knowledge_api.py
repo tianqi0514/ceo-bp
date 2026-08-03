@@ -11,13 +11,19 @@ from ceobp.settings import Settings
 
 def _client(
     handler: httpx.MockTransport,
+    vega_handler: httpx.MockTransport | None = None,
 ) -> tuple[TestClient, KWeaverKnowledgeNetworkGateway]:
     upstream = KWeaverClient(
         "https://kweaver.internal",
         token="Bearer service-token",
         transport=handler,
     )
-    gateway = KWeaverKnowledgeNetworkGateway(upstream)
+    vega = KWeaverClient(
+        "https://vega.internal",
+        token="Bearer service-token",
+        transport=vega_handler or handler,
+    )
+    gateway = KWeaverKnowledgeNetworkGateway(upstream, vega_client=vega)
     app = create_app(
         Settings(environment="test", static_dir="/not-found"),
         knowledge_network_gateway=gateway,
@@ -141,3 +147,133 @@ def test_knowledge_requests_reject_ambiguous_or_invalid_inputs() -> None:
     assert duplicate_tags.status_code == 422
     assert invalid_id.status_code == 404
     assert excessive_limit.status_code == 422
+
+
+def test_object_type_routes_list_and_create_real_kweaver_objects() -> None:
+    def bkn_handle(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(201, json=[{"id": "ot-new"}])
+        if request.url.path.endswith("/ot-new"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "ot-new",
+                    "name": "客户",
+                    "data_source": {"id": "res-new", "type": "resource"},
+                    "primary_keys": ["customer_id"],
+                    "display_key": "customer_name",
+                    "data_properties": [
+                        {
+                            "name": "customer_id",
+                            "display_name": "客户编号",
+                            "type": "string",
+                        },
+                        {
+                            "name": "customer_name",
+                            "display_name": "客户名称",
+                            "type": "string",
+                        },
+                    ],
+                },
+            )
+        return httpx.Response(200, json={"entries": []})
+
+    def vega_handle(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "res-new"})
+        return httpx.Response(
+            200,
+            json={
+                "entries": [
+                    {
+                        "id": "res-new",
+                        "name": "managed-object-dataset",
+                        "catalog_id": "ceobp_business_catalog",
+                        "category": "dataset",
+                    }
+                ]
+            },
+        )
+
+    client, gateway = _client(
+        httpx.MockTransport(bkn_handle),
+        httpx.MockTransport(vega_handle),
+    )
+    try:
+        page = client.get("/api/v1/knowledge-networks/kn-1/object-types")
+        created = client.post(
+            "/api/v1/knowledge-networks/kn-1/object-types",
+            json={
+                "name": "客户",
+                "primary_key": "customer_id",
+                "display_key": "customer_name",
+                "fields": [
+                    {
+                        "name": "customer_id",
+                        "display_name": "客户编号",
+                        "type": "string",
+                    },
+                    {
+                        "name": "customer_name",
+                        "display_name": "客户名称",
+                        "type": "string",
+                    },
+                ],
+            },
+        )
+    finally:
+        gateway.close()
+
+    assert page.status_code == 200
+    assert page.json() == {"items": []}
+    assert created.status_code == 201
+    assert created.json()["name"] == "客户"
+    assert created.json()["fields"][1]["display_name"] == "客户名称"
+
+
+def test_object_type_request_requires_unique_declared_keys_and_supported_types() -> None:
+    client = TestClient(create_app(Settings(environment="test", static_dir="/not-found")))
+    path = "/api/v1/knowledge-networks/kn-1/object-types"
+
+    undeclared_key = client.post(
+        path,
+        json={
+            "name": "客户",
+            "primary_key": "missing_id",
+            "display_key": "customer_name",
+            "fields": [
+                {
+                    "name": "customer_name",
+                    "display_name": "客户名称",
+                    "type": "string",
+                }
+            ],
+        },
+    )
+    duplicate_fields = client.post(
+        path,
+        json={
+            "name": "客户",
+            "primary_key": "customer_id",
+            "display_key": "customer_id",
+            "fields": [
+                {"name": "customer_id", "display_name": "编号", "type": "string"},
+                {"name": "customer_id", "display_name": "编号2", "type": "string"},
+            ],
+        },
+    )
+    unsupported_type = client.post(
+        path,
+        json={
+            "name": "客户",
+            "primary_key": "customer_id",
+            "display_key": "customer_id",
+            "fields": [
+                {"name": "customer_id", "display_name": "编号", "type": "vector"}
+            ],
+        },
+    )
+
+    assert undeclared_key.status_code == 422
+    assert duplicate_fields.status_code == 422
+    assert unsupported_type.status_code == 422

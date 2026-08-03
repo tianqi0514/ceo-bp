@@ -3,8 +3,10 @@ import {
   ApiError,
   buildKnowledgeNetwork,
   createKnowledgeNetwork,
+  createObjectType,
   getKnowledgeNetwork,
   listKnowledgeNetworks,
+  listObjectTypes,
 } from "./knowledgeApi";
 
 afterEach(() => {
@@ -119,5 +121,58 @@ describe("knowledge API", () => {
       retryable: true,
     });
     await expect(listKnowledgeNetworks()).rejects.toThrow("请求失败（502）");
+  });
+
+  it("lists and creates object types inside the selected knowledge network", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ items: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: "ot-1", name: "客户" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const input = {
+      name: "客户",
+      primary_key: "customer_id",
+      display_key: "customer_name",
+      fields: [
+        {
+          name: "customer_id",
+          display_name: "客户编号",
+          type: "string" as const,
+        },
+        {
+          name: "customer_name",
+          display_name: "客户名称",
+          type: "string" as const,
+        },
+      ],
+    };
+
+    await listObjectTypes("kn/1");
+    await createObjectType("kn/1", input);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/knowledge-networks/kn%2F1/object-types",
+      expect.objectContaining({ signal: undefined }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/knowledge-networks/kn%2F1/object-types",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+        signal: undefined,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      },
+    );
   });
 });

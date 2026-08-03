@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import builtins
+import secrets
 from collections.abc import Callable
-from typing import Literal, TypeVar
+from typing import Literal, TypeVar, cast
 
 from kweaver import KWeaverClient, NoAuth  # type: ignore[import-untyped]
 from kweaver._errors import (  # type: ignore[import-untyped]
@@ -19,6 +20,12 @@ from kweaver._errors import (  # type: ignore[import-untyped]
 )
 from kweaver.types import (  # type: ignore[import-untyped]
     KnowledgeNetwork as UpstreamKnowledgeNetwork,
+)
+from kweaver.types import (
+    ObjectType as UpstreamObjectType,
+)
+from kweaver.types import (
+    Property,
 )
 from pydantic import BaseModel, ConfigDict
 
@@ -53,6 +60,28 @@ class BuildReceipt(BaseModel):
     state: Literal["accepted"] = "accepted"
 
 
+ObjectFieldType = Literal["string", "integer", "decimal", "datetime", "boolean"]
+
+
+class ObjectTypeField(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    display_name: str
+    type: ObjectFieldType
+
+
+class ObjectType(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    knowledge_network_id: str
+    name: str
+    primary_keys: builtins.list[str]
+    display_key: str
+    fields: builtins.list[ObjectTypeField]
+
+
 class KWeaverGatewayError(RuntimeError):
     """Stable error exposed to the CEO-BP application layer."""
 
@@ -74,8 +103,16 @@ class KWeaverGatewayError(RuntimeError):
 class KWeaverKnowledgeNetworkGateway:
     """Translate the official SDK model into CEO-BP-owned contracts."""
 
-    def __init__(self, client: KWeaverClient) -> None:
+    def __init__(
+        self,
+        client: KWeaverClient,
+        *,
+        vega_client: KWeaverClient | None = None,
+        managed_catalog_id: str = "ceobp_business_catalog",
+    ) -> None:
         self._client = client
+        self._vega_client = vega_client
+        self._managed_catalog_id = managed_catalog_id
 
     @classmethod
     def from_settings(cls, settings: Settings) -> KWeaverKnowledgeNetworkGateway:
@@ -93,10 +130,25 @@ class KWeaverKnowledgeNetworkGateway:
             token = settings.kweaver_token
             authorization = token if " " in token else f"Bearer {token}"
             client = KWeaverClient(token=authorization, **common)
-        return cls(client)
+
+        vega_common = {
+            **common,
+            "base_url": settings.kweaver_vega_base_url or settings.kweaver_base_url,
+        }
+        if settings.kweaver_no_auth:
+            vega_client = KWeaverClient(auth=NoAuth(), **vega_common)
+        else:
+            vega_client = KWeaverClient(token=authorization, **vega_common)
+        return cls(
+            client,
+            vega_client=vega_client,
+            managed_catalog_id=settings.kweaver_managed_catalog_id,
+        )
 
     def close(self) -> None:
         self._client.close()
+        if self._vega_client is not None and self._vega_client is not self._client:
+            self._vega_client.close()
 
     def list(
         self,
@@ -174,6 +226,91 @@ class KWeaverKnowledgeNetworkGateway:
         self._call(lambda: self._client.knowledge_networks.build(knowledge_network_id))
         return BuildReceipt(knowledge_network_id=knowledge_network_id)
 
+    def list_object_types(
+        self,
+        knowledge_network_id: str,
+    ) -> builtins.list[ObjectType]:
+        items = self._call(
+            lambda: self._client.object_types.list(knowledge_network_id)
+        )
+        return [_map_object_type(item) for item in items]
+
+    def create_object_type(
+        self,
+        knowledge_network_id: str,
+        *,
+        name: str,
+        fields: builtins.list[ObjectTypeField],
+        primary_keys: builtins.list[str],
+        display_key: str,
+    ) -> ObjectType:
+        if self._vega_client is None:
+            raise KWeaverGatewayError(
+                "KWEAVER_VEGA_NOT_CONFIGURED",
+                "KWeaver data resource integration is not configured",
+                retryable=False,
+            )
+        vega_client = self._vega_client
+
+        resource_name = f"ceobp-object-{knowledge_network_id[:24]}-{secrets.token_hex(6)}"
+        schema = [field.model_dump() for field in fields]
+        resource = self._call(
+            lambda: vega_client.resources.create(
+                resource_name,
+                self._managed_catalog_id,
+                category="dataset",
+                fields=schema,
+            )
+        )
+
+        try:
+            item = self._call(
+                lambda: self._client.object_types.create(
+                    knowledge_network_id,
+                    name=name,
+                    resource_id=resource.id,
+                    primary_keys=primary_keys,
+                    display_key=display_key,
+                    properties=[
+                        Property(
+                            name=field.name,
+                            display_name=field.display_name,
+                            type=field.type,
+                        )
+                        for field in fields
+                    ],
+                )
+            )
+        except KWeaverGatewayError:
+            self._remove_managed_resource(resource.id)
+            raise
+
+        if not item.id:
+            self._remove_managed_resource(resource.id)
+            raise KWeaverGatewayError(
+                "KWEAVER_INVALID_RESPONSE",
+                "KWeaver returned an invalid object type response",
+                retryable=False,
+            )
+        if not item.name:
+            item = self._call(
+                lambda: self._client.object_types.get(
+                    knowledge_network_id,
+                    item.id,
+                )
+            )
+        return _map_object_type(item)
+
+    def _remove_managed_resource(self, resource_id: str) -> None:
+        if self._vega_client is None:
+            return
+        vega_client = self._vega_client
+        try:
+            self._call(lambda: vega_client.resources.delete(resource_id))
+        except KWeaverGatewayError:
+            # Keep the original object-creation error; cleanup can be retried by ops.
+            return
+
     def _call(self, operation: Callable[[], _Result]) -> _Result:
         try:
             return operation()
@@ -197,6 +334,30 @@ def _map_network(item: UpstreamKnowledgeNetwork) -> KnowledgeNetwork:
         tags=list(item.tags),
         statistics=statistics,
     )
+
+
+def _map_object_type(item: UpstreamObjectType) -> ObjectType:
+    return ObjectType(
+        id=item.id,
+        knowledge_network_id=item.kn_id,
+        name=item.name,
+        primary_keys=list(item.primary_keys),
+        display_key=item.display_key,
+        fields=[
+            ObjectTypeField(
+                name=field.name,
+                display_name=field.display_name or field.name,
+                type=_owned_field_type(field.type),
+            )
+            for field in item.properties
+        ],
+    )
+
+
+def _owned_field_type(raw_type: str) -> ObjectFieldType:
+    if raw_type in {"integer", "decimal", "datetime", "boolean"}:
+        return cast(ObjectFieldType, raw_type)
+    return "string"
 
 
 def _is_empty_sdk_response_error(exc: AttributeError) -> bool:

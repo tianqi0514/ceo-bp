@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal, Self
 
 from fastapi import APIRouter, Path, Query, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ceobp.kweaver_gateway import (
     BuildReceipt,
     KnowledgeNetwork,
     KWeaverGatewayError,
     KWeaverKnowledgeNetworkGateway,
+    ObjectType,
+    ObjectTypeField,
 )
 
 KnowledgeNetworkId = Annotated[
@@ -44,6 +46,53 @@ class KnowledgeNetworkPage(BaseModel):
     items: list[KnowledgeNetwork]
     offset: int
     limit: int
+
+
+FieldName = Annotated[
+    str,
+    Field(min_length=1, max_length=64, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$"),
+]
+
+
+class CreateObjectTypeFieldRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: FieldName
+    display_name: str = Field(min_length=1, max_length=120)
+    type: Literal["string", "integer", "decimal", "datetime", "boolean"]
+
+
+class CreateObjectTypeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=40)
+    primary_key: FieldName
+    display_key: FieldName
+    fields: list[CreateObjectTypeFieldRequest] = Field(min_length=1, max_length=50)
+
+    @field_validator("fields")
+    @classmethod
+    def validate_unique_fields(
+        cls,
+        fields: list[CreateObjectTypeFieldRequest],
+    ) -> list[CreateObjectTypeFieldRequest]:
+        names = [field.name for field in fields]
+        if len(set(names)) != len(names):
+            raise ValueError("Field names must be unique")
+        return fields
+
+    @model_validator(mode="after")
+    def validate_key_membership(self) -> Self:
+        names = {field.name for field in self.fields}
+        if self.primary_key not in names or self.display_key not in names:
+            raise ValueError("Primary and display keys must be declared fields")
+        return self
+
+
+class ObjectTypePage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ObjectType]
 
 
 def create_knowledge_router(
@@ -104,5 +153,33 @@ def create_knowledge_router(
     )
     def build_knowledge_network(knowledge_network_id: KnowledgeNetworkId) -> BuildReceipt:
         return required_gateway().build(knowledge_network_id)
+
+    @router.get(
+        "/{knowledge_network_id}/object-types",
+        response_model=ObjectTypePage,
+        summary="列出知识网络中的经营对象类型",
+    )
+    def list_object_types(knowledge_network_id: KnowledgeNetworkId) -> ObjectTypePage:
+        return ObjectTypePage(
+            items=required_gateway().list_object_types(knowledge_network_id)
+        )
+
+    @router.post(
+        "/{knowledge_network_id}/object-types",
+        response_model=ObjectType,
+        status_code=status.HTTP_201_CREATED,
+        summary="创建由平台托管数据集支撑的经营对象类型",
+    )
+    def create_object_type(
+        knowledge_network_id: KnowledgeNetworkId,
+        request: CreateObjectTypeRequest,
+    ) -> ObjectType:
+        return required_gateway().create_object_type(
+            knowledge_network_id,
+            name=request.name,
+            fields=[ObjectTypeField(**field.model_dump()) for field in request.fields],
+            primary_keys=[request.primary_key],
+            display_key=request.display_key,
+        )
 
     return router
