@@ -1,0 +1,68 @@
+diff --git a/interfaces/common.go b/interfaces/common.go
+--- a/interfaces/common.go
++++ b/interfaces/common.go
+@@ -738,13 +738,6 @@ func GetBKNConceptSchemaDefinition(vectorDim int, defaultSmallModelEnabled bool)
+ 			OriginalName: "data_properties.index_config",
+ 			Description:  "BKN对象类概念的数据属性索引配置",
+ 		},
+-		{
+-			Name:         "data_properties.index_config",
+-			Type:         data_type.DATATYPE_JSON,
+-			DisplayName:  "data_properties.index_config",
+-			OriginalName: "data_properties.index_config",
+-			Description:  "BKN对象类概念的数据属性索引配置",
+-		},
+ 		{
+ 			Name:         "logic_properties.name",
+ 			Type:         data_type.DATATYPE_TEXT,
+@@ -1113,7 +1106,7 @@ func GetBKNConceptSchemaDefinition(vectorDim int, defaultSmallModelEnabled bool)
+ 		{
+ 			Name:         "unit_type",
+ 			Type:         data_type.DATATYPE_STRING,
+-			DisplayName:  "schedule",
++			DisplayName:  "unit_type",
+ 			OriginalName: "unit_type",
+ 			Description:  "BKN指标的单位类型",
+ 			Features: []PropertyFeature{
+diff --git a/interfaces/common_test.go b/interfaces/common_test.go
+new file mode 100644
+--- /dev/null
++++ b/interfaces/common_test.go
+@@ -0,0 +1,37 @@
++// Copyright The kweaver.ai Authors.
++//
++// Licensed under the Apache License, Version 2.0.
++
++package interfaces
++
++import "testing"
++
++func TestGetBKNConceptSchemaDefinitionHasUniqueFieldNames(t *testing.T) {
++	for _, smallModelEnabled := range []bool{false, true} {
++		fieldNames := make(map[string]struct{})
++		displayNames := make(map[string]struct{})
++		for _, property := range GetBKNConceptSchemaDefinition(1024, smallModelEnabled) {
++			if _, exists := fieldNames[property.Name]; exists {
++				t.Fatalf(
++					"duplicate field name %q when default small model enabled is %t",
++					property.Name,
++					smallModelEnabled,
++				)
++			}
++			fieldNames[property.Name] = struct{}{}
++
++			displayName := property.DisplayName
++			if displayName == "" {
++				displayName = property.Name
++			}
++			if _, exists := displayNames[displayName]; exists {
++				t.Fatalf(
++					"duplicate field display name %q when default small model enabled is %t",
++					displayName,
++					smallModelEnabled,
++				)
++			}
++			displayNames[displayName] = struct{}{}
++		}
++	}
++}

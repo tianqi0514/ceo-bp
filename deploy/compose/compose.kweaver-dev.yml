@@ -36,6 +36,7 @@ services:
   redis:
     image: redis:7.4.2-alpine
     restart: unless-stopped
+    user: "999:1000"
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -44,7 +45,7 @@ services:
       retries: 20
     read_only: true
     tmpfs:
-      - /data:size=32m,mode=0700
+      - /data:size=32m,uid=999,gid=1000,mode=0700
     cap_drop:
       - ALL
     security_opt:
@@ -104,7 +105,7 @@ services:
       - --advertise-kafka-addr
       - internal://redpanda:9092
     healthcheck:
-      test: ["CMD", "rpk", "cluster", "health", "--brokers=localhost:9092"]
+      test: ["CMD", "rpk", "cluster", "health", "-X", "brokers=localhost:9092"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -124,9 +125,9 @@ services:
       - sh
       - -ec
       - >-
-        install -o 10001 -g 10001 -m 0400 /source/bkn-backend-config.yaml /runtime/ &&
-        install -o 10001 -g 10001 -m 0400 /source/ontology-query-config.yaml /runtime/ &&
-        install -o 10001 -g 10001 -m 0400 /source/vega-backend-config.yaml /runtime/
+        install -m 0444 /source/bkn-backend-config.yaml /runtime/ &&
+        install -m 0444 /source/ontology-query-config.yaml /runtime/ &&
+        install -m 0444 /source/vega-backend-config.yaml /runtime/
     volumes:
       - type: bind
         source: ${CEO_BP_KWEAVER_RUNTIME_DIR:?set CEO_BP_KWEAVER_RUNTIME_DIR}/config
@@ -182,6 +183,7 @@ services:
     restart: unless-stopped
     environment:
       AUTH_ENABLED: "false"
+      AUDIT_MODE_UT: "true"
       BUSINESS_DOMAIN_ENABLED: "false"
       TZ: Asia/Shanghai
     volumes:
@@ -211,6 +213,36 @@ services:
     networks:
       - ceobp-kweaver
 
+  catalog-init:
+    image: alpine@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+    restart: "no"
+    user: "10001:10001"
+    command:
+      - sh
+      - -ec
+      - >-
+        for attempt in $$(seq 1 60); do
+          if wget -q -O /dev/null --post-data='' http://vega:13014/api/vega-backend/in/v1/catalogs/adp_bkn_catalog/enable;
+          then exit 0; fi;
+          sleep 1;
+        done;
+        exit 1
+    depends_on:
+      bkn:
+        condition: service_started
+      vega:
+        condition: service_started
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 32
+    mem_limit: 32m
+    cpus: 0.1
+    networks:
+      - ceobp-kweaver
+
   ontology-query:
     image: ceobp/kweaver-ontology-query:${CEO_BP_KWEAVER_IMAGE_VERSION:-0.5.0-p2}
     restart: unless-stopped
@@ -220,6 +252,8 @@ services:
     volumes:
       - ceobp-kweaver-config:/opt/kweaver/config:ro
     depends_on:
+      catalog-init:
+        condition: service_completed_successfully
       config-init:
         condition: service_completed_successfully
       bkn:
@@ -255,6 +289,8 @@ services:
     ports:
       - "${CEO_BP_KWEAVER_BIND:-127.0.0.1}:${CEO_BP_KWEAVER_PORT:-19006}:8000"
     depends_on:
+      catalog-init:
+        condition: service_completed_successfully
       bkn:
         condition: service_started
       ontology-query:
