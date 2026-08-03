@@ -8,5 +8,6 @@ ADR 记录难以逆转、跨模块或长期影响显著的技术决策。批准�
 | [ADR-0002](ADR-0002-MODULAR-MONOLITH.md) | platform-api 先采用模块化单体 | Accepted |
 | [ADR-0003](ADR-0003-KNOWLEDGE-BOUNDARIES.md) | 文档知识库、业务知识网络与决策档案分离 | Accepted |
 | [ADR-0004](ADR-0004-FULLSTACK-VERTICAL-SLICES.md) | 功能按前后端纵向切片共同交付 | Accepted |
+| [ADR-0005](ADR-0005-KWEAVER-PATCH-GOVERNANCE.md) | 锁定 KWeaver 上游并治理本地补丁 | Accepted |
 
 新增 ADR 使用 [`templates/ADR.md`](../../../templates/ADR.md)。
