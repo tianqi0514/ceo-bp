@@ -456,25 +456,27 @@ function App() {
                   value={selected.statistics?.concept_groups}
                 />
               </div>
-              <div className="build-panel">
-                <div>
-                  <h3>构建知识网络</h3>
-                  <p>按当前对象、关系和指标定义重新生成查询索引。</p>
+              {(selected.statistics?.object_types ?? 0) > 0 ? (
+                <div className="build-panel">
+                  <div>
+                    <h3>构建知识网络</h3>
+                    <p>按当前对象、关系和指标定义重新生成查询索引。</p>
+                  </div>
+                  <button
+                    className="button primary"
+                    disabled={building}
+                    type="button"
+                    onClick={() => void triggerBuild()}
+                  >
+                    {building ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : (
+                      <Play size={16} />
+                    )}
+                    {building ? "正在提交" : "触发全量构建"}
+                  </button>
                 </div>
-                <button
-                  className="button primary"
-                  disabled={building}
-                  type="button"
-                  onClick={() => void triggerBuild()}
-                >
-                  {building ? (
-                    <LoaderCircle className="spin" size={16} />
-                  ) : (
-                    <Play size={16} />
-                  )}
-                  {building ? "正在提交" : "触发全量构建"}
-                </button>
-              </div>
+              ) : null}
             </div>
           </aside>
         </div>

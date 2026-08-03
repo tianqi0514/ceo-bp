@@ -183,6 +183,9 @@ describe("App", () => {
     expect(
       await screen.findByRole("dialog", { name: "集团经营网络" }),
     ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "触发全量构建" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "返回知识网络列表" }));
     expect(
       screen.queryByRole("dialog", { name: "集团经营网络" }),
@@ -193,7 +196,15 @@ describe("App", () => {
     vi.mocked(createKnowledgeNetwork).mockRejectedValue(
       new Error("知识网络名称已存在。"),
     );
-    vi.mocked(getKnowledgeNetwork).mockResolvedValue(network);
+    vi.mocked(getKnowledgeNetwork).mockResolvedValue({
+      ...network,
+      statistics: {
+        object_types: 1,
+        relation_types: 0,
+        action_types: 0,
+        concept_groups: 0,
+      },
+    });
     vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<App />);
     await screen.findByText("集团经营网络");

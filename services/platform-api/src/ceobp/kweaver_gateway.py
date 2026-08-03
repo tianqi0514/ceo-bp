@@ -137,6 +137,37 @@ class KWeaverKnowledgeNetworkGateway:
                 tags=tags,
             )
         )
+        if item.name:
+            return _map_network(item)
+        if not item.id:
+            raise KWeaverGatewayError(
+                "KWEAVER_INVALID_RESPONSE",
+                "KWeaver returned an invalid create response",
+                retryable=False,
+            )
+
+        if description is not None:
+            def persist_comment() -> None:
+                try:
+                    self._client.knowledge_networks.update(
+                        item.id,
+                        name=name,
+                        comment=description,
+                        tags=tags or [],
+                        branch="main",
+                    )
+                except AttributeError as exc:
+                    if not _is_empty_sdk_response_error(exc):
+                        raise
+
+            self._call(persist_comment)
+
+        item = self._call(
+            lambda: self._client.knowledge_networks.get(
+                item.id,
+                include_statistics=True,
+            )
+        )
         return _map_network(item)
 
     def build(self, knowledge_network_id: str) -> BuildReceipt:
@@ -166,6 +197,12 @@ def _map_network(item: UpstreamKnowledgeNetwork) -> KnowledgeNetwork:
         tags=list(item.tags),
         statistics=statistics,
     )
+
+
+def _is_empty_sdk_response_error(exc: AttributeError) -> bool:
+    """Recognize the locked SDK parsing a successful empty update response."""
+
+    return getattr(exc, "obj", object()) is None and getattr(exc, "name", None) == "get"
 
 
 def _translate_error(exc: KWeaverError) -> KWeaverGatewayError:

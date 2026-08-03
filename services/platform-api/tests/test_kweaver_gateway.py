@@ -95,13 +95,22 @@ def test_create_and_build_have_explicit_upstream_side_effects() -> None:
     requests: list[tuple[str, str, dict[str, object]]] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content)
+        body = json.loads(request.content) if request.content else {}
         requests.append((request.method, request.url.path, body))
         if request.url.path.endswith("/jobs"):
             return httpx.Response(202)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "kn-new"})
+        if request.method == "PUT":
+            return httpx.Response(204)
         return httpx.Response(
-            201,
-            json={"id": "kn-new", "name": body["name"], "tags": body["tags"]},
+            200,
+            json={
+                "id": "kn-new",
+                "name": "供应链",
+                "comment": "风险关联",
+                "tags": ["经营", "风险"],
+            },
         )
 
     gateway = _gateway(httpx.MockTransport(handle))
@@ -111,7 +120,13 @@ def test_create_and_build_have_explicit_upstream_side_effects() -> None:
     finally:
         gateway.close()
 
-    assert network.id == "kn-new"
+    assert network.model_dump() == {
+        "id": "kn-new",
+        "name": "供应链",
+        "description": "风险关联",
+        "tags": ["经营", "风险"],
+        "statistics": None,
+    }
     assert receipt.model_dump() == {
         "knowledge_network_id": "kn-new",
         "state": "accepted",
@@ -126,11 +141,25 @@ def test_create_and_build_have_explicit_upstream_side_effects() -> None:
             "tags": ["经营", "风险"],
         },
     )
-    assert requests[1][0:2] == (
+    assert requests[1] == (
+        "PUT",
+        "/api/ontology-manager/v1/knowledge-networks/kn-new",
+        {
+            "name": "供应链",
+            "comment": "风险关联",
+            "tags": ["经营", "风险"],
+            "branch": "main",
+        },
+    )
+    assert requests[2][0:2] == (
+        "GET",
+        "/api/ontology-manager/v1/knowledge-networks/kn-new",
+    )
+    assert requests[3][0:2] == (
         "POST",
         "/api/ontology-manager/v1/knowledge-networks/kn-new/jobs",
     )
-    assert requests[1][2]["job_type"] == "full"
+    assert requests[3][2]["job_type"] == "full"
 
 
 def test_upstream_error_is_sanitized_and_marked_retryable() -> None:
