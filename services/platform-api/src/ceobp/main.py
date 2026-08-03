@@ -1,0 +1,253 @@
+"""FastAPI application factory for the CEO-BP platform foundation."""
+
+from __future__ import annotations
+
+import re
+import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from ceobp.decision_analysis import analyze_decision
+from ceobp.knowledge_api import create_knowledge_router
+from ceobp.kweaver_gateway import KWeaverGatewayError, KWeaverKnowledgeNetworkGateway
+from ceobp.schemas import (
+    Capability,
+    CapabilityList,
+    DecisionAnalysisRequest,
+    DecisionAnalysisResponse,
+    EndpointInfo,
+    HealthResponse,
+    OverviewResponse,
+    ServiceLinks,
+    ServiceRoot,
+    SystemInfo,
+)
+from ceobp.settings import Settings
+
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+APP_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; style-src 'self'; script-src 'self'; "
+    "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+)
+DOCS_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "img-src 'self' data: https://fastapi.tiangolo.com; connect-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'self'"
+)
+
+
+def _request_id(candidate: str | None) -> str:
+    if candidate and REQUEST_ID_PATTERN.fullmatch(candidate):
+        return candidate
+    return str(uuid.uuid4())
+
+
+def _capabilities() -> list[Capability]:
+    return [
+        Capability(
+            id="platform-foundation",
+            name="平台 API、健康检查与请求追踪",
+            status="foundation",
+            target_phase="P1",
+        ),
+        Capability(id="metrics", name="指标中心", status="planned", target_phase="P2"),
+        Capability(
+            id="knowledge",
+            name="企业知识库",
+            status="planned",
+            target_phase="P3",
+        ),
+        Capability(
+            id="decisions",
+            name="决策事项与行动复盘",
+            status="planned",
+            target_phase="P3",
+        ),
+        Capability(
+            id="forecast",
+            name="统计预测与场景模拟",
+            status="planned",
+            target_phase="P4",
+        ),
+    ]
+
+
+def _endpoints() -> list[EndpointInfo]:
+    return [
+        EndpointInfo(method="GET", path="/", name="系统运行控制台"),
+        EndpointInfo(method="GET", path="/health/ready", name="服务就绪检查"),
+        EndpointInfo(method="GET", path="/api/v1/overview", name="运行状态总览"),
+        EndpointInfo(method="GET", path="/docs", name="API 文档"),
+    ]
+
+
+def create_app(
+    settings: Settings | None = None,
+    knowledge_network_gateway: KWeaverKnowledgeNetworkGateway | None = None,
+) -> FastAPI:
+    runtime = settings or Settings.from_environment()
+    started_at = datetime.now(UTC)
+    owns_gateway = knowledge_network_gateway is None and runtime.kweaver_configured
+    gateway = knowledge_network_gateway
+    if gateway is None and runtime.kweaver_configured:
+        gateway = KWeaverKnowledgeNetworkGateway.from_settings(runtime)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if owns_gateway and gateway is not None:
+                gateway.close()
+
+    app = FastAPI(
+        title=runtime.product_name,
+        summary="企业经营决策分析平台统一 API",
+        version=runtime.version,
+        docs_url="/docs",
+        redoc_url=None,
+        openapi_url="/openapi.json",
+        lifespan=lifespan,
+    )
+    app.state.settings = runtime
+
+    @app.exception_handler(KWeaverGatewayError)
+    async def kweaver_error_handler(
+        request: Request,
+        exc: KWeaverGatewayError,
+    ) -> JSONResponse:
+        status_code = _kweaver_error_status(exc.code)
+        payload: dict[str, Any] = {
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "retryable": exc.retryable,
+            },
+            "request_id": getattr(request.state, "request_id", None),
+        }
+        return JSONResponse(status_code=status_code, content=payload)
+
+    @app.middleware("http")
+    async def request_context(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        request_id = _request_id(request.headers.get("X-Request-ID"))
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = (
+            DOCS_CONTENT_SECURITY_POLICY
+            if request.url.path == "/docs"
+            else APP_CONTENT_SECURITY_POLICY
+        )
+        return response
+
+    @app.get("/health/live", response_model=HealthResponse, tags=["health"])
+    async def liveness() -> HealthResponse:
+        return HealthResponse(status="ok", service=runtime.service_name, version=runtime.version)
+
+    @app.get("/health/ready", response_model=HealthResponse, tags=["health"])
+    async def readiness() -> HealthResponse:
+        return HealthResponse(status="ready", service=runtime.service_name, version=runtime.version)
+
+    @app.get("/api/v1/system/info", response_model=SystemInfo, tags=["system"])
+    async def system_info() -> SystemInfo:
+        return SystemInfo(
+            product=runtime.product_name,
+            service=runtime.service_name,
+            version=runtime.version,
+            environment=runtime.environment,
+            build_sha=runtime.build_sha,
+        )
+
+    @app.get(
+        "/api/v1/system/capabilities",
+        response_model=CapabilityList,
+        tags=["system"],
+    )
+    async def capabilities() -> CapabilityList:
+        return CapabilityList(items=_capabilities())
+
+    @app.get("/api/v1/overview", response_model=OverviewResponse, tags=["system"])
+    async def overview() -> OverviewResponse:
+        server_time = datetime.now(UTC)
+        return OverviewResponse(
+            info=SystemInfo(
+                product=runtime.product_name,
+                service=runtime.service_name,
+                version=runtime.version,
+                environment=runtime.environment,
+                build_sha=runtime.build_sha,
+            ),
+            health=HealthResponse(
+                status="ready",
+                service=runtime.service_name,
+                version=runtime.version,
+            ),
+            capabilities=_capabilities(),
+            started_at=started_at,
+            server_time=server_time,
+            uptime_seconds=max(0, int((server_time - started_at).total_seconds())),
+            endpoints=_endpoints(),
+        )
+
+    @app.post(
+        "/api/v1/decisions/analyze",
+        response_model=DecisionAnalysisResponse,
+        tags=["decisions"],
+        summary="比较经营决策备选方案",
+    )
+    async def analyze(request: DecisionAnalysisRequest) -> DecisionAnalysisResponse:
+        return analyze_decision(request)
+
+    app.include_router(create_knowledge_router(gateway))
+
+    static_dir = Path(runtime.static_dir)
+    if (static_dir / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="console")
+    else:
+
+        @app.get("/", response_model=ServiceRoot, tags=["system"])
+        async def root() -> ServiceRoot:
+            return ServiceRoot(
+                product=runtime.product_name,
+                service=runtime.service_name,
+                version=runtime.version,
+                status="foundation",
+                links=ServiceLinks(
+                    openapi="/openapi.json",
+                    docs="/docs",
+                    health="/health/ready",
+                ),
+            )
+
+    return app
+
+
+app = create_app()
+
+
+def _kweaver_error_status(code: str) -> int:
+    if code == "KNOWLEDGE_NETWORK_NOT_FOUND":
+        return 404
+    if code == "KWEAVER_VALIDATION_FAILED":
+        return 422
+    if code == "KWEAVER_CONFLICT":
+        return 409
+    if code in {"KWEAVER_UNAVAILABLE", "KWEAVER_NOT_CONFIGURED"}:
+        return 503
+    return 502

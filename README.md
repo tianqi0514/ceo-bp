@@ -2,7 +2,7 @@
 
 CEO-BP 是面向企业经营管理者的决策分析平台。本仓库用于统一承载产品文档、架构、代码、测试、部署及全过程记录。
 
-当前仓库处于 **v0.1.0 项目治理与架构基线阶段**，尚不代表生产可用版本。
+当前仓库处于 **v0.5.0-rc1 KWeaver 重构开发阶段**：已锁定并验证 KWeaver Core、DIP、SDK、Admin 源码基线，完成隔离的 Vega/BKN/ontology-query 真实运行栈，以及知识网络创建、查询、详情和重启持久化闭环。下一纵向切片是对象类型与经营语义建模；9006 仍运行历史 0.4.0 探索版本，本候选不代表生产可用版本。
 
 ## 项目目标
 
@@ -20,12 +20,14 @@ CEO-BP 是面向企业经营管理者的决策分析平台。本仓库用于统�
 - [文档导航与生命周期](docs/README.md)
 - [产品范围与路线图](docs/01-product/SCOPE_AND_ROADMAP.md)
 - [目标架构](docs/02-architecture/TARGET_ARCHITECTURE.md)
+- [KWeaver 重构实施蓝图](docs/02-architecture/KWEAVER_REFACTOR_BLUEPRINT.md)
 - [迁移与复用策略](docs/02-architecture/MIGRATION_STRATEGY.md)
 - [开发工作流](docs/03-development/DEVELOPMENT_WORKFLOW.md)
 - [测试策略](docs/04-testing/TEST_STRATEGY.md)
 - [版本与发布管理](docs/05-release/RELEASE_MANAGEMENT.md)
 - [验收手册](docs/06-acceptance/ACCEPTANCE_MANUAL.md)
 - [运维、安全与合规](docs/07-operations/OPERATIONS_SECURITY.md)
+- [9006 演示环境部署](docs/08-environments/DEMO_DEPLOYMENT.md)
 - [过程记录](records/README.md)
 - [变更日志](CHANGELOG.md)
 
@@ -43,7 +45,7 @@ tools/                      仓库级校验工具
 tests/                      跨模块契约、集成和验收测试
 ```
 
-代码目录将在对应迭代开始时按架构基线创建，避免在尚未完成组件准入和许可证审计前复制上游源码。
+当前 `platform-api` 通过锁定提交的官方 KWeaver Python SDK 调用经准入的 Go 内核，`apps/console` 正按 DIP/Vega 的业务流程逐屏迁移。上游源码尚未复制进主仓库，完整许可证、SBOM 和运行时准入完成前不发布组合二进制。
 
 ## 文档校验
 
@@ -51,6 +53,7 @@ tests/                      跨模块契约、集成和验收测试
 
 ```bash
 python3 tools/validate_docs.py
+make verify
 ```
 
 ## 协作规则

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -11,6 +12,16 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
+IGNORED_DIRS = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "dist",
+    "node_modules",
+}
 REQUIRED_FILES = (
     "README.md",
     "CHANGELOG.md",
@@ -26,7 +37,12 @@ CONTROLLED_METADATA = ("| 文档编号 |", "| 版本 |", "| 状态 |")
 
 
 def markdown_files() -> list[Path]:
-    return sorted(path for path in ROOT.rglob("*.md") if ".git" not in path.parts)
+    files: list[Path] = []
+    for current, directories, filenames in os.walk(ROOT):
+        directories[:] = [name for name in directories if name not in IGNORED_DIRS]
+        directory = Path(current)
+        files.extend(directory / name for name in filenames if name.endswith(".md"))
+    return sorted(files)
 
 
 def validate_required(errors: list[str]) -> None:
